@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (Tailwind v4): `.dark` on <html> enables dark: variants */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  /* DESIGN.md tokens (Stitch: "Sporty Utility Stream Guide") */
+  --color-canvas: #e9f4fe; /* sky-mist page background */
+  --color-navy: #0b2545; /* deep navy — headings, team names */
+  --color-primary: #0284c7; /* primary CTA / links */
+  --color-primary-dark: #0369a1; /* primary hover */
+}
+
+/* Card elevation per DESIGN.md (navy-tinted ambient shadow) */
+@utility shadow-card {
+  box-shadow:
+    0 4px 20px -2px rgba(11, 37, 69, 0.06),
+    0 1px 2px 0 rgba(11, 37, 69, 0.04);
+}
+
+/* Hide scrollbars on horizontal chip rows (keeps the clean look) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Text cursor (caret) visible in both modes — brand blue.
+   Without this, OS dark mode renders a white caret even on light inputs. */
+input,
+textarea,
+select,
+[contenteditable] {
+  caret-color: #0284c7;
+}
+
+html {
+  scroll-behavior: smooth;
+}
