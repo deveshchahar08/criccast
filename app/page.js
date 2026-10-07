@@ -49,6 +49,9 @@ export default async function Home({ searchParams }) {
   else if (when === "tomorrow") list = list.filter((m) => dayDiffIST(m.startTime) === 1);
 
   const { featured, rest } = splitFeatured(list);
+  // Home stays compact: show max 8 compact rows. Full list lives on /fixtures
+  // (Hy's call, Oct 5 — otherwise home gets endlessly long as series grow).
+  const restPreview = rest.slice(0, 8);
 
   return (
     <div className="mx-auto max-w-2xl md:max-w-4xl lg:max-w-6xl">
@@ -163,10 +166,18 @@ export default async function Home({ searchParams }) {
           </p>
         )}
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {rest.map((m) => (
+          {restPreview.map((m) => (
             <CompactMatchRow key={m.id} match={m} />
           ))}
         </div>
+        {rest.length > restPreview.length && (
+          <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+            +{rest.length - restPreview.length} more on{" "}
+            <Link href="/fixtures" className="font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400">
+              Fixtures
+            </Link>
+          </p>
+        )}
       </section>
     </div>
   );

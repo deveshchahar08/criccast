@@ -59,6 +59,9 @@ function SeriesTab({ call, refresh }) {
   const [form, setForm] = useState({ name: "", format: "", season: "", priority: "", broadcastJson: "" });
   const [editing, setEditing] = useState(null);
   const [msg, setMsg] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
+  const [seriesMatches, setSeriesMatches] = useState({});
+  const [loadingMatches, setLoadingMatches] = useState({});
   const formRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -66,6 +69,50 @@ function SeriesTab({ call, refresh }) {
     if (ok) setSeries(data.series || []);
   }, [call]);
   useEffect(() => { load(); }, [load, refresh]);
+
+  const toggleMatches = async (s) => {
+    if (expandedId === s.id) { setExpandedId(null); return; }
+    setExpandedId(s.id);
+    if (!(s.id in seriesMatches)) {
+      setLoadingMatches((prev) => ({ ...prev, [s.id]: true }));
+      const { ok, data } = await call(`/api/admin/matches?seriesId=${s.id}&limit=200`);
+      if (ok) setSeriesMatches((prev) => ({ ...prev, [s.id]: data.matches || [] }));
+      setLoadingMatches((prev) => ({ ...prev, [s.id]: false }));
+    }
+  };
+  const verifyMatch = async (mid, sid) => {
+    const { ok, data } = await call(`/api/admin/matches/${mid}/verify`, { method: "POST" });
+    if (ok) {
+      setSeriesMatches((prev) => ({
+        ...prev,
+        [sid]: (prev[sid] || []).map((m) => (m.id === mid ? { ...m, verifiedAt: new Date().toISOString() } : m)),
+      }));
+      load();
+    } else setMsg(data.error || "Verify failed.");
+  };
+  const removeMatch = async (mid, sid) => {
+    if (!confirm("Delete this match?")) return;
+    const { ok, data } = await call(`/api/admin/matches/${mid}`, { method: "DELETE" });
+    if (ok) {
+      setSeriesMatches((prev) => ({ ...prev, [sid]: (prev[sid] || []).filter((m) => m.id !== mid) }));
+      load();
+    } else setMsg(data.error || "Delete failed.");
+  };
+  const markFinishedSeries = async (mid, sid) => {
+    if (!confirm("Mark this match as finished? It will disappear from the site.")) return;
+    const { ok, data } = await call(`/api/admin/matches/${mid}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "finished" }),
+    });
+    if (ok) {
+      setSeriesMatches((prev) => ({
+        ...prev,
+        [sid]: (prev[sid] || []).map((m) => (m.id === mid ? { ...m, status: "finished" } : m)),
+      }));
+      load();
+      setMsg("Match marked as finished.");
+    } else setMsg(data.error || "Update failed.");
+  };
 
   const startEdit = (s) => {
     setEditing(s.id);
@@ -116,7 +163,15 @@ function SeriesTab({ call, refresh }) {
       : " WARNING: this series has no broadcast info yet — its matches will show with no channel/OTT details.";
     if (!confirm(`Verify all upcoming matches of "${series.name}"?${warn}`)) return;
     const { ok, data } = await call(`/api/admin/series/${series.id}/verify-all`, { method: "POST" });
-    if (ok) { setMsg(`${data.verified} match(es) verified.`); load(); }
+    if (ok) {
+      setMsg(`${data.verified} match(es) verified.`);
+      const now = new Date().toISOString();
+      setSeriesMatches((prev) => ({
+        ...prev,
+        [series.id]: (prev[series.id] || []).map((m) => ({ ...m, verifiedAt: m.verifiedAt || now })),
+      }));
+      load();
+    }
     else setMsg(data.error || "Verify-all failed.");
   };
 
@@ -125,29 +180,90 @@ function SeriesTab({ call, refresh }) {
       <h2 className="mb-3 text-lg font-extrabold dark:text-white">Series</h2>
       <div className="mb-4 space-y-2">
         {series.map((s) => (
-          <div key={s.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-            <div>
-              <p className="font-bold dark:text-white">
-                {s.name}
-                {isNewSeries(s.createdAt) && (
-                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                    NEW
-                  </span>
+          <div key={s.id} className="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between p-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => toggleMatches(s)}
+                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  title={expandedId === s.id ? "Hide matches" : "Show matches"}
+                >
+                  {expandedId === s.id ? "▲" : "▼"}
+                </button>
+                <div>
+                  <p className="font-bold dark:text-white">
+                    {s.name}
+                    {s.isDone ? (
+                      <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-green-700 dark:bg-green-950 dark:text-green-400">
+                        ✓ DONE
+                      </span>
+                    ) : (
+                      isNewSeries(s.createdAt) && (
+                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                          NEW
+                        </span>
+                      )
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {s.format} {s.season ? `· ${s.season}` : ""} ·{" "}
+                    {(s.broadcast?.tvChannels || []).length} TV ·{" "}
+                    {(s.broadcast?.ottPlatforms || []).length} OTT ·{" "}
+                    {s.matchCount ?? 0} matches
+                    {!s.isDone && (s.matchCount ?? 0) > 0 && (
+                      <span className="font-bold text-amber-600 dark:text-amber-400">
+                        {" "}· {s.verifiedCount ?? 0}/{s.matchCount} verified
+                      </span>
+                    )}
+                    {" "}· prio {s.priority || 0}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
+                <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+                <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
+              </div>
+            </div>
+            {expandedId === s.id && (
+              <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+                {loadingMatches[s.id] ? (
+                  <p className="py-2 text-xs text-slate-400">Loading matches…</p>
+                ) : (seriesMatches[s.id] || []).length === 0 ? (
+                  <p className="py-2 text-xs text-slate-400">No upcoming matches in this series.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {seriesMatches[s.id].map((m) => (
+                      <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold dark:text-white">
+                            {(m.teams || []).join(" vs ")}
+                            {m.verifiedAt ? (
+                              <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">VERIFIED</span>
+                            ) : (
+                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
+                            {m.venue ? ` · ${m.venue}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          {!m.verifiedAt && (
+                            <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
+                          )}
+                          {m.status === "live" && (
+                            <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
+                          )}
+                          <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {s.format} {s.season ? `· ${s.season}` : ""} ·{" "}
-                {(s.broadcast?.tvChannels || []).length} TV ·{" "}
-                {(s.broadcast?.ottPlatforms || []).length} OTT ·{" "}
-                {s.matchCount ?? 0} matches ·{" "}
-                prio {s.priority || 0}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
-              <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
-              <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -189,6 +305,34 @@ function MatchesTab({ call, refresh }) {
   const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "" });
   const [unverifiedOnly, setUnverifiedOnly] = useState(false);
+  const [editingMatch, setEditingMatch] = useState(null);
+
+  const startMatchEdit = (m) => {
+    setEditingMatch(m.id);
+    // Pre-fill the form like series edit does — datetime-local needs YYYY-MM-DDTHH:mm
+    let dt = "";
+    if (m.startTime) {
+      const d = new Date(m.startTime);
+      const pad = (n) => String(n).padStart(2, "0");
+      dt = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    setForm({
+      seriesId: m.seriesId || "",
+      teams: (m.teams || []).join(", "),
+      shortNames: (m.shortNames || []).join(", "),
+      startTime: dt,
+      venue: m.venue || "",
+      city: m.city || "",
+      matchNumber: m.matchNumber || "",
+      format: m.format || "",
+    });
+    setMsg("");
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  };
+  const cancelMatchEdit = () => {
+    setEditingMatch(null);
+    setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "" });
+  };
 
   const load = useCallback(async () => {
     const [{ ok, data }, sRes] = await Promise.all([
@@ -203,6 +347,15 @@ function MatchesTab({ call, refresh }) {
   const verify = async (id) => {
     const { ok, data } = await call(`/api/admin/matches/${id}/verify`, { method: "POST" });
     if (ok) load(); else setMsg(data.error || "Verify failed.");
+  };
+  const markFinished = async (id) => {
+    if (!confirm("Mark this match as finished? It will disappear from the site.")) return;
+    const { ok, data } = await call(`/api/admin/matches/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "finished" }),
+    });
+    if (ok) { load(); setMsg("Match marked as finished."); }
+    else setMsg(data.error || "Update failed.");
   };
   const syncNow = async () => {
     setSyncing(true);
@@ -244,13 +397,16 @@ function MatchesTab({ call, refresh }) {
       venue: form.venue,
       city: form.city,
       ...(form.matchNumber.trim() ? { matchNumber: form.matchNumber.trim() } : {}),
+      ...(form.format ? { format: form.format } : {}),
     };
-    const { ok, data } = await call("/api/admin/matches", { method: "POST", body: JSON.stringify(body) });
+    const { ok, data } = editingMatch
+      ? await call(`/api/admin/matches/${editingMatch}`, { method: "PUT", body: JSON.stringify(body) })
+      : await call("/api/admin/matches", { method: "POST", body: JSON.stringify(body) });
     if (ok) {
-      setMsg("Match created.");
-      setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "" });
+      setMsg(editingMatch ? "Match updated." : "Match created.");
+      cancelMatchEdit();
       load();
-    } else setMsg(data.error || "Create failed.");
+    } else setMsg(data.error || (editingMatch ? "Update failed." : "Create failed."));
   };
 
   return (
@@ -290,6 +446,8 @@ function MatchesTab({ call, refresh }) {
             </div>
             <div className="flex shrink-0 gap-2">
               {!m.verifiedAt && <button onClick={() => verify(m.id)} className={btnCls}>Verify</button>}
+              <button onClick={() => startMatchEdit(m)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+              {m.status === "live" && <button onClick={() => markFinished(m.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>}
               <button onClick={() => remove(m.id)} className={dangerCls}>Delete</button>
             </div>
           </div>
@@ -298,7 +456,7 @@ function MatchesTab({ call, refresh }) {
       </div>
 
       <form onSubmit={create} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-        <h3 className="font-bold dark:text-white">New match</h3>
+        <h3 className="font-bold dark:text-white">{editingMatch ? "Edit match" : "New match"}</h3>
         <select className={inputCls} value={form.seriesId} onChange={(e) => setForm({ ...form, seriesId: e.target.value })} required>
           <option value="">Select series…</option>
           {series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -311,7 +469,10 @@ function MatchesTab({ call, refresh }) {
           <input className={inputCls} placeholder="Venue" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
           <input className={inputCls} placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         </div>
-        <button type="submit" className={btnCls}>Create match</button>
+        <div className="flex gap-2">
+          <button type="submit" className={btnCls}>{editingMatch ? "Update match" : "Create match"}</button>
+          {editingMatch && <button type="button" onClick={cancelMatchEdit} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>}
+        </div>
       </form>
     </div>
   );

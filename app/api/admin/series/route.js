@@ -22,12 +22,28 @@ export async function GET(request) {
     { $group: { _id: "$series", n: { $sum: 1 } } },
   ]);
   const countMap = Object.fromEntries(counts.map((c) => [String(c._id), c.n]));
+  // Verified vs unverified counts — powers the DONE / progress badges in admin.
+  const verifiedCounts = await Match.aggregate([
+    { $match: { verifiedAt: { $ne: null } } },
+    { $group: { _id: "$series", n: { $sum: 1 } } },
+  ]);
+  const verifiedMap = Object.fromEntries(verifiedCounts.map((c) => [String(c._id), c.n]));
   // lean() docs have _id but no id virtual — the admin UI uses s.id.
-  const series = docs.map((d) => ({
-    ...d,
-    id: String(d._id),
-    matchCount: countMap[String(d._id)] || 0,
-  }));
+  const series = docs.map((d) => {
+    const total = countMap[String(d._id)] || 0;
+    const verified = verifiedMap[String(d._id)] || 0;
+    const hasBroadcast =
+      (d.broadcast?.tvChannels || []).length > 0 ||
+      (d.broadcast?.ottPlatforms || []).length > 0;
+    return {
+      ...d,
+      id: String(d._id),
+      matchCount: total,
+      verifiedCount: verified,
+      // DONE = broadcast info added AND every match verified (and at least 1 match).
+      isDone: hasBroadcast && total > 0 && verified >= total,
+    };
+  });
   return NextResponse.json({ series });
 }
 

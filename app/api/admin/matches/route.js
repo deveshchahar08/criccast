@@ -13,9 +13,13 @@ export async function GET(request) {
   await dbConnect();
   // Admin is for verifying UPCOMING matches — show those first (soonest),
   // not the 50 oldest. Finished matches need no verification.
-  const docs = await Match.find({
+  const { searchParams } = new URL(request.url);
+  const seriesId = searchParams.get("seriesId");
+  const filter = {
     startTime: { $gte: new Date(Date.now() - 12 * 60 * 60 * 1000) },
-  })
+  };
+  if (seriesId) filter.series = seriesId;
+  const docs = await Match.find(filter)
     .populate('series')
     .sort({ startTime: 1 })
     .limit(200)

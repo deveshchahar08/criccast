@@ -2,6 +2,8 @@
 // Set NEXT_PUBLIC_SITE_URL to the real domain at deploy time.
 import { getHomeMatches, getAllSeries } from "@/lib/queries";
 
+export const revalidate = 3600;
+
 export default async function sitemap() {
   const base = (process.env.NEXT_PUBLIC_SITE_URL || "https://criccast.vercel.app").replace(/\/$/, "");
   const now = new Date();
