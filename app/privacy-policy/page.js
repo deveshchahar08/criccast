@@ -1,7 +1,7 @@
 // Privacy Policy — static legal page (required for Google AdSense approval).
 export const metadata = { title: "Privacy Policy — CricCast" };
 
-const CONTACT_EMAIL = "contact@criccast.in";
+const CONTACT_EMAIL = "contact@criccast.co.in";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
         Privacy Policy
       </h1>
       <p className="mt-1 text-xs font-semibold text-slate-400 dark:text-slate-500">
-        Last updated: October 1, 2026
+        Last updated: October 13, 2026
       </p>
 
       <div className="mt-6 space-y-6 text-[15px] leading-relaxed text-slate-600 dark:text-slate-300">
@@ -93,9 +93,15 @@ export default function PrivacyPolicyPage() {
             3. Analytics
           </h2>
           <p>
-            We do not currently use Google Analytics or any other
-            third-party analytics service. If we introduce analytics in the
-            future, this policy will be updated to describe it.
+            We use <strong>Google Analytics</strong> to understand how
+            visitors use the Site — for example, which match pages are
+            viewed, roughly where visitors are located (city level), and
+            whether they arrived from a search engine or a direct link. This
+            data is aggregated and anonymous; it does not identify you
+            personally, and we do not use it for advertising profiling.
+            Google Analytics sets its own cookies to distinguish visits. You
+            can block analytics cookies through your browser settings
+            without affecting how the Site works.
           </p>
         </section>
 

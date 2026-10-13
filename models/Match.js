@@ -27,6 +27,14 @@ const matchSchema = new Schema(
     digitalOnly: { type: Boolean, default: false }, // no linear TV telecast
     digitalOnlyNote: { type: String }, // e.g. "No Linear TV telecast on Tata Play…"
     verifiedAt: { type: Date, default: null }, // null = not verified yet
+    // Admin re-confirmation reminder (set when the info was verified with some
+    // doubt, e.g. channel listing not yet official). Purely an admin aid:
+    // it NEVER affects whether the match shows on the public site.
+    recheckAt: { type: Date, default: null }, // show in Recheck tab on/after this date
+    recheckNote: { type: String, default: '' }, // why it needs a second look
+    // Admin "New" box: a match counts as new for 3 days after it appears
+    // (createdAt) unless Hy skips it — this stamps when he did.
+    dismissedNewAt: { type: Date, default: null },
     sourceUrl: { type: String }, // quiet link, detail page only
   },
   { timestamps: true }

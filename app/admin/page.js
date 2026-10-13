@@ -46,15 +46,63 @@ const btnCls =
 const dangerCls =
   "rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950";
 
-// NEW badge: series created in the last 7 days (by sync or by hand) get a NEW
-// tag in the Series tab — pairs with the weekly routine (Google Alerts +
-// Sunday review): new series are the ones to check, verify or manual-add.
+// NEW badge: series created in the last 3 days (by sync or by hand) get a NEW
+// tag in the Series tab — new series are the ones to check, verify or manual-add.
 const isNewSeries = (createdAt) => {
   if (!createdAt) return false;
-  return Date.now() - new Date(createdAt).getTime() < 7 * 24 * 3600 * 1000;
+  return Date.now() - new Date(createdAt).getTime() < 3 * 24 * 3600 * 1000;
 };
 
-function SeriesTab({ call, refresh }) {
+// RECHECK: a flagged match surfaces in the Recheck tab 3 days before its
+// start (Hy's call: enough buffer for a side-hustle admin rhythm, and TV
+// listings are only final 1-2 days out anyway). Purely an admin reminder —
+// it never changes what the public site shows.
+const RECHECK_LEAD_MS = 3 * 24 * 3600 * 1000;
+const recheckDateFor = (startTime) =>
+  new Date(new Date(startTime).getTime() - RECHECK_LEAD_MS);
+const fmtDay = (d) =>
+  new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
+
+function LivePill() {
+  return (
+    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-red-600 dark:bg-red-950 dark:text-red-400">
+      ● LIVE
+    </span>
+  );
+}
+
+// Set or remove a match's recheck flag (asks for an optional note when
+// setting). Returns true when the flag actually changed.
+// Acting on a match also takes it out of the admin "New" box (dismissedNewAt).
+async function toggleMatchRecheck(call, m) {
+  if (m.recheckAt) {
+    if (!confirm(`Recheck is set for ${fmtDay(m.recheckAt)}${m.recheckNote ? ` — "${m.recheckNote}"` : ""}. Remove it?`)) return false;
+    const { ok } = await call(`/api/admin/matches/${m.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ recheckAt: null, recheckNote: "", dismissedNewAt: new Date().toISOString() }),
+    });
+    return ok;
+  }
+  const note = prompt("Why does this match need a recheck? (optional note)", "");
+  if (note === null) return false;
+  const { ok } = await call(`/api/admin/matches/${m.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ recheckAt: recheckDateFor(m.startTime).toISOString(), recheckNote: note.trim(), dismissedNewAt: new Date().toISOString() }),
+  });
+  return ok;
+}
+
+// "NEW" box: an item is new for 3 days after it appears in the admin
+// (createdAt), unless Hy skips it (dismissedNewAt). After 3 days it simply
+// moves down into the Action needed list — never lost, never stuck.
+const NEW_WINDOW_MS = 3 * 24 * 3600 * 1000;
+const isNewItem = (item) =>
+  !!item &&
+  !item.dismissedNewAt &&
+  !!item.createdAt &&
+  Date.now() - new Date(item.createdAt).getTime() < NEW_WINDOW_MS;
+
+function SeriesTab({ call, refresh, editSeriesRequest }) {
   const [series, setSeries] = useState([]);
   const [form, setForm] = useState({ name: "", format: "", season: "", priority: "", broadcastJson: "" });
   const [editing, setEditing] = useState(null);
@@ -62,6 +110,7 @@ function SeriesTab({ call, refresh }) {
   const [expandedId, setExpandedId] = useState(null);
   const [seriesMatches, setSeriesMatches] = useState({});
   const [loadingMatches, setLoadingMatches] = useState({});
+  const [actionOnly, setActionOnly] = useState(true);
   const formRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -113,6 +162,23 @@ function SeriesTab({ call, refresh }) {
       setMsg("Match marked as finished.");
     } else setMsg(data.error || "Update failed.");
   };
+  const toggleRecheckSeriesMatch = async (m, sid) => {
+    const changed = await toggleMatchRecheck(call, m);
+    if (changed) {
+      const { ok, data } = await call(`/api/admin/matches?seriesId=${sid}&limit=200`);
+      if (ok) setSeriesMatches((prev) => ({ ...prev, [sid]: data.matches || [] }));
+    }
+  };
+  const recheckSeries = async (series) => {
+    const note = prompt(`Flag ALL upcoming matches of "${series.name}" for recheck (each surfaces 3 days before its match)? Optional note:`, "");
+    if (note === null) return;
+    const { ok, data } = await call(`/api/admin/series/${series.id}/recheck`, {
+      method: "POST",
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    if (ok) setMsg(`${data.flagged} match(es) of "${series.name}" flagged for recheck.`);
+    else setMsg(data.error || "Recheck flag failed.");
+  };
 
   const startEdit = (s) => {
     setEditing(s.id);
@@ -126,6 +192,18 @@ function SeriesTab({ call, refresh }) {
     // The form sits below the (long) series list — bring it into view.
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
+  // Cross-tab jump: the Recheck tab's Edit button sets editSeriesRequest —
+  // when this tab mounts/loads, open that series' edit form directly.
+  const handledEditNonce = useRef(0);
+  useEffect(() => {
+    if (!editSeriesRequest || editSeriesRequest.nonce === handledEditNonce.current) return;
+    const s = series.find((x) => x.id === editSeriesRequest.id);
+    if (s) {
+      handledEditNonce.current = editSeriesRequest.nonce;
+      startEdit(s);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSeriesRequest, series]);
   const reset = () => {
     setEditing(null);
     setForm({ name: "", format: "", season: "", priority: "", broadcastJson: "" });
@@ -153,6 +231,22 @@ function SeriesTab({ call, refresh }) {
     const { ok, data } = await call(`/api/admin/series/${series.id}`, { method: "DELETE" });
     if (ok) load(); else setMsg(data.error || "Delete failed.");
   };
+  const clearJunkSeries = async () => {
+    // Junk = no verified matches AND not new (older than 3 days).
+    // These are API-created series Hy never cared about.
+    const junk = series.filter(
+      (s) => !s.isDone && (s.verifiedCount ?? 0) === 0 && !isNewSeries(s.createdAt)
+    );
+    if (!junk.length) { setMsg("No junk series to clear."); return; }
+    if (!confirm(`Delete ${junk.length} junk series (no verified matches, older than 3 days)? Their unverified matches go too. Cannot be undone.`)) return;
+    let deleted = 0;
+    for (const s of junk) {
+      const { ok } = await call(`/api/admin/series/${s.id}`, { method: "DELETE" });
+      if (ok) deleted++;
+    }
+    setMsg(`Cleared ${deleted} junk series.`);
+    load();
+  };
 
   const verifyAll = async (series) => {
     const hasBroadcast =
@@ -175,11 +269,84 @@ function SeriesTab({ call, refresh }) {
     else setMsg(data.error || "Verify-all failed.");
   };
 
+  const dismissSeriesNew = async (s) => {
+    const { ok, data } = await call(`/api/admin/series/${s.id}/dismiss-new`, { method: "POST" });
+    if (ok) load(); else setMsg(data.error || "Skip failed.");
+  };
+
+  // NEW box membership: brand-new series (last 3 days, not skipped) plus any
+  // series holding brand-new matches — minus ones already DONE. Box members
+  // are kept out of the list below so nothing shows twice.
+  const isInNew = (s) =>
+    !s.isDone && (isNewItem(s) || (s.newMatchCount ?? 0) > 0);
+  const newSeries = actionOnly ? series.filter(isInNew) : [];
+  const newSeriesIds = new Set(newSeries.map((s) => s.id));
+
   return (
     <div>
-      <h2 className="mb-3 text-lg font-extrabold dark:text-white">Series</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-extrabold dark:text-white">Series</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActionOnly((v) => !v)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold ${actionOnly ? "bg-sky-600 text-white hover:bg-sky-700" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}
+            title="Show only series needing action (new or unverified matches)"
+          >
+            {actionOnly ? "Action needed ✓" : "Show all"}
+          </button>
+          <button onClick={clearJunkSeries} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950" title="Delete series with no verified matches (older than 3 days)">
+            Clear junk
+          </button>
+        </div>
+      </div>
+      {msg && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p>}
+      {actionOnly && newSeries.length > 0 && (
+        <div className="mb-4 rounded-xl border-2 border-sky-200 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/40">
+          <h3 className="mb-1 text-sm font-extrabold dark:text-white">✨ New ({newSeries.length})</h3>
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+            New series, and series with new matches, from the last 3 days. Anything left here moves down into the list below on its own after 3 days.
+          </p>
+          <div className="space-y-2">
+            {newSeries.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <div className="min-w-0">
+                  <p className="truncate font-bold dark:text-white">
+                    {s.name}
+                    {(s.newMatchCount ?? 0) > 0 && (
+                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
+                        +{s.newMatchCount} new {s.newMatchCount === 1 ? "match" : "matches"}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {s.format} {s.season ? `· ${s.season}` : ""} · {(s.broadcast?.tvChannels || []).length} TV · {(s.broadcast?.ottPlatforms || []).length} OTT · {s.matchCount ?? 0} matches
+                    {(s.matchCount ?? 0) > 0 && (
+                      <span className="font-bold text-amber-600 dark:text-amber-400"> · {s.verifiedCount ?? 0}/{s.matchCount} verified</span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
+                  <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
+                  <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+                  <button onClick={() => dismissSeriesNew(s)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
+                  <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mb-4 space-y-2">
-        {series.map((s) => (
+        {series.filter((s) => {
+          if (newSeriesIds.has(s.id)) return false;
+          if (actionOnly) {
+            // Show only what needs Hy's attention: new series, or series with unverified matches
+            const hasUnverified = (s.matchCount ?? 0) > (s.verifiedCount ?? 0);
+            return !s.isDone && (isNewSeries(s.createdAt) || hasUnverified);
+          }
+          return true;
+        }).map((s) => (
           <div key={s.id} className="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between p-3">
               <div className="flex items-center gap-2">
@@ -204,6 +371,11 @@ function SeriesTab({ call, refresh }) {
                         </span>
                       )
                     )}
+                    {(s.newMatchCount ?? 0) > 0 && (
+                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
+                        +{s.newMatchCount} new
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {s.format} {s.season ? `· ${s.season}` : ""} ·{" "}
@@ -221,6 +393,7 @@ function SeriesTab({ call, refresh }) {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
+                <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
                 <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
                 <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
               </div>
@@ -243,6 +416,12 @@ function SeriesTab({ call, refresh }) {
                             ) : (
                               <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
                             )}
+                            {m.status === "live" && <LivePill />}
+                            {m.recheckAt && (
+                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
+                                🔁 {fmtDay(m.recheckAt)}
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
@@ -253,6 +432,13 @@ function SeriesTab({ call, refresh }) {
                           {!m.verifiedAt && (
                             <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
                           )}
+                          <button
+                            onClick={() => toggleRecheckSeriesMatch(m, s.id)}
+                            title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"}`}
+                          >
+                            🔁
+                          </button>
                           {m.status === "live" && (
                             <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
                           )}
@@ -303,8 +489,8 @@ function MatchesTab({ call, refresh }) {
   const [series, setSeries] = useState([]);
   const [msg, setMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "" });
-  const [unverifiedOnly, setUnverifiedOnly] = useState(false);
+  const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", status: "scheduled", broadcastJson: "" });
+  const [actionOnly, setActionOnly] = useState(true);
   const [editingMatch, setEditingMatch] = useState(null);
 
   const startMatchEdit = (m) => {
@@ -325,13 +511,15 @@ function MatchesTab({ call, refresh }) {
       city: m.city || "",
       matchNumber: m.matchNumber || "",
       format: m.format || "",
+      status: m.status || "scheduled",
+      broadcastJson: m.broadcastOverride ? JSON.stringify(m.broadcastOverride, null, 2) : "",
     });
     setMsg("");
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   };
   const cancelMatchEdit = () => {
     setEditingMatch(null);
-    setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "" });
+    setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "", status: "scheduled", broadcastJson: "" });
   };
 
   const load = useCallback(async () => {
@@ -357,13 +545,32 @@ function MatchesTab({ call, refresh }) {
     if (ok) { load(); setMsg("Match marked as finished."); }
     else setMsg(data.error || "Update failed.");
   };
+  const toggleRecheck = async (m) => {
+    const changed = await toggleMatchRecheck(call, m);
+    if (changed) {
+      setMsg(m.recheckAt ? "Recheck flag removed." : `Recheck set — it will surface in the Recheck tab on ${fmtDay(recheckDateFor(m.startTime))}.`);
+      load();
+    }
+  };
+  const dismissNew = async (m) => {
+    const { ok, data } = await call(`/api/admin/matches/${m.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ dismissedNewAt: new Date().toISOString() }),
+    });
+    if (ok) load(); else setMsg(data.error || "Skip failed.");
+  };
+  const dismissAllNew = async () => {
+    const { ok, data } = await call("/api/admin/matches/dismiss-new", { method: "POST" });
+    if (ok) { setMsg("New box cleared — those matches stay in the list below as usual."); load(); }
+    else setMsg(data.error || "Skip all failed.");
+  };
   const syncNow = async () => {
     setSyncing(true);
     setMsg("Syncing fixtures from CricAPI…");
     const { ok, data } = await call("/api/admin/sync", { method: "POST" });
     setSyncing(false);
     if (ok) {
-      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
+      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series${data.skippedBlacklisted ? `, ${data.skippedBlacklisted} blacklisted skipped` : ""}. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
       load();
     } else {
       setMsg(data.error || "Sync failed.");
@@ -380,13 +587,26 @@ function MatchesTab({ call, refresh }) {
     if (!confirm(`Delete all ${count} UNVERIFIED matches? Verified matches stay. You can re-sync to get them back. Cannot be undone.`)) return;
     const { ok, data } = await call("/api/admin/matches/clear-unverified", { method: "DELETE" });
     if (ok) {
-      setMsg(`Cleared ${data.deleted} unverified matches.`);
-      setUnverifiedOnly(false);
+      const pruned = data.prunedSeries ? `, ${data.prunedSeries} empty series pruned` : "";
+      setMsg(`Cleared ${data.deleted} unverified matches${pruned}.`);
+      setActionOnly(true);
       load();
     } else setMsg(data.error || "Clear failed.");
   };
   const create = async (e) => {
     e.preventDefault();
+    // Per-match broadcast override (v60): when this match's telecast differs
+    // from its series (e.g. streaming-only inside a TV series), the JSON here
+    // wins over the series broadcast. Empty = inherit the series broadcast.
+    let broadcastOverride;
+    if (form.broadcastJson && form.broadcastJson.trim()) {
+      try {
+        broadcastOverride = JSON.parse(form.broadcastJson);
+      } catch {
+        setMsg("Broadcast override JSON is invalid — fix it or clear the field.");
+        return;
+      }
+    }
     const body = {
       seriesId: form.seriesId,
       teams: form.teams.split(",").map((t) => t.trim()).filter(Boolean),
@@ -398,6 +618,11 @@ function MatchesTab({ call, refresh }) {
       city: form.city,
       ...(form.matchNumber.trim() ? { matchNumber: form.matchNumber.trim() } : {}),
       ...(form.format ? { format: form.format } : {}),
+      // Status editable ONLY in Edit mode — manual restore path when sync wrongly finishes a match (e.g. a Test between days). New-match creation keeps the server default.
+      ...(editingMatch && form.status ? { status: form.status } : {}),
+      // Only send on edit (or when filled on create): emptying the field on
+      // edit clears a stale override back to series inheritance.
+      ...(editingMatch || broadcastOverride ? { broadcastOverride: broadcastOverride || {} } : {}),
     };
     const { ok, data } = editingMatch
       ? await call(`/api/admin/matches/${editingMatch}`, { method: "PUT", body: JSON.stringify(body) })
@@ -409,17 +634,72 @@ function MatchesTab({ call, refresh }) {
     } else setMsg(data.error || (editingMatch ? "Update failed." : "Create failed."));
   };
 
+  // NEW box: unverified matches that arrived in the last 3 days and weren't
+  // skipped. They leave on their own after 3 days (or on Verify / Delete /
+  // Recheck / Skip) and then live only in the list below.
+  const newMatches = matches
+    .filter((m) => isNewItem(m) && !m.verifiedAt && m.status !== "finished")
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const newIds = new Set(newMatches.map((m) => m.id));
+  // Main list: with Action needed on, items sitting in the NEW box are not
+  // repeated here. Order: live first, then freshest arrivals on top and the
+  // older pending pile below (Hy's flow).
+  const visibleMatches = matches
+    .filter((m) => (!actionOnly || !m.verifiedAt || m.status === "live") && !(actionOnly && newIds.has(m.id)))
+    .sort((a, b) =>
+      (b.status === "live") - (a.status === "live") ||
+      new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+    );
+
+  const matchRow = (m, inNew) => (
+    <div key={m.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="min-w-0">
+        <p className="truncate font-bold dark:text-white">
+          {m.teams?.[0]} vs {m.teams?.[1]}
+          <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-extrabold ${m.verifiedAt ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"}`}>
+            {m.verifiedAt ? "VERIFIED" : "UNVERIFIED"}
+          </span>
+          {m.status === "live" && <LivePill />}
+          {m.recheckAt && (
+            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
+              🔁 {fmtDay(m.recheckAt)}
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {m.seriesName}{m.format ? ` · ${m.format}` : ""}{m.matchNumber ? ` · ${m.matchNumber}` : ""} · {m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        {!m.verifiedAt && <button onClick={() => verify(m.id)} className={btnCls}>Verify</button>}
+        <button
+          onClick={() => toggleRecheck(m)}
+          title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"}`}
+        >
+          🔁
+        </button>
+        <button onClick={() => startMatchEdit(m)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+        {m.status === "live" && <button onClick={() => markFinished(m.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>}
+        <button onClick={() => remove(m.id)} className={dangerCls}>Delete</button>
+        {inNew && (
+          <button onClick={() => dismissNew(m)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-extrabold dark:text-white">Matches</h2>
         <div className="flex gap-2">
           <button
-            onClick={() => setUnverifiedOnly((v) => !v)}
-            className={`rounded-lg px-4 py-2 text-sm font-bold ${unverifiedOnly ? "bg-amber-500 text-white hover:bg-amber-600" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}
-            title="Show only matches needing verification"
+            onClick={() => setActionOnly((v) => !v)}
+            className={`rounded-lg px-4 py-2 text-sm font-bold ${actionOnly ? "bg-sky-600 text-white hover:bg-sky-700" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}
+            title="Show only matches needing action (unverified, plus live ones for the Finish button)"
           >
-            {unverifiedOnly ? `New only (${matches.filter((m) => !m.verifiedAt).length})` : "New only"}
+            {actionOnly ? "Action needed ✓" : "Show all"}
           </button>
           <button onClick={clearJunk} className={dangerCls} title="Delete all unverified matches">
             Clear junk
@@ -430,29 +710,24 @@ function MatchesTab({ call, refresh }) {
         </div>
       </div>
       {msg && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p>}
-      <div className="mb-4 space-y-2">
-        {matches.filter((m) => !unverifiedOnly || !m.verifiedAt).map((m) => (
-          <div key={m.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-            <div className="min-w-0">
-              <p className="truncate font-bold dark:text-white">
-                {m.teams?.[0]} vs {m.teams?.[1]}
-                <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-extrabold ${m.verifiedAt ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"}`}>
-                  {m.verifiedAt ? "VERIFIED" : "UNVERIFIED"}
-                </span>
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {m.seriesName}{m.format ? ` · ${m.format}` : ""}{m.matchNumber ? ` · ${m.matchNumber}` : ""} · {m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : ""}
-              </p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              {!m.verifiedAt && <button onClick={() => verify(m.id)} className={btnCls}>Verify</button>}
-              <button onClick={() => startMatchEdit(m)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
-              {m.status === "live" && <button onClick={() => markFinished(m.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>}
-              <button onClick={() => remove(m.id)} className={dangerCls}>Delete</button>
-            </div>
+      {actionOnly && newMatches.length > 0 && (
+        <div className="mb-4 rounded-xl border-2 border-sky-200 bg-sky-50 p-3 dark:border-sky-900 dark:bg-sky-950/40">
+          <div className="mb-1 flex items-center justify-between">
+            <h3 className="text-sm font-extrabold dark:text-white">✨ New ({newMatches.length})</h3>
+            <button onClick={dismissAllNew} className="text-xs font-bold text-sky-700 hover:underline dark:text-sky-400">Skip all</button>
           </div>
-        ))}
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+            Added in the last 3 days. Verify, delete, recheck or skip — anything left here moves down into the list below on its own after 3 days.
+          </p>
+          <div className="space-y-2">{newMatches.map((m) => matchRow(m, true))}</div>
+        </div>
+      )}
+      <div className="mb-4 space-y-2">
+        {visibleMatches.map((m) => matchRow(m, false))}
         {matches.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">No matches yet.</p>}
+        {matches.length > 0 && actionOnly && visibleMatches.length === 0 && newMatches.length === 0 && (
+          <p className="text-sm text-slate-500 dark:text-slate-400">All caught up — nothing needs action. Tap "Show all" to see verified matches.</p>
+        )}
       </div>
 
       <form onSubmit={create} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
@@ -469,6 +744,28 @@ function MatchesTab({ call, refresh }) {
           <input className={inputCls} placeholder="Venue" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
           <input className={inputCls} placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         </div>
+        {editingMatch && (
+          <label className="block text-sm font-bold dark:text-slate-200">
+            Status
+            <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="scheduled">Scheduled</option>
+              <option value="live">Live</option>
+              <option value="finished">Finished</option>
+            </select>
+          </label>
+        )}
+        <div>
+          <label className="mb-1 block text-xs font-bold text-slate-500 dark:text-slate-400">
+            Broadcast override JSON — optional, per-match only (wins over the series broadcast; leave empty to inherit the series)
+          </label>
+          <textarea
+            className={inputCls}
+            rows={5}
+            placeholder='{"tvChannels": [], "ottPlatforms": [{"name": "JioHotstar", "free": false, "freeNote": "Plans from ₹79/month", "languages": ["English", "Hindi"]}]}'
+            value={form.broadcastJson}
+            onChange={(e) => setForm({ ...form, broadcastJson: e.target.value })}
+          />
+        </div>
         <div className="flex gap-2">
           <button type="submit" className={btnCls}>{editingMatch ? "Update match" : "Create match"}</button>
           {editingMatch && <button type="button" onClick={cancelMatchEdit} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>}
@@ -478,11 +775,115 @@ function MatchesTab({ call, refresh }) {
   );
 }
 
+function RecheckTab({ call, refresh, onEditSeries }) {
+  const [matches, setMatches] = useState([]);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(async () => {
+    const { ok, data } = await call("/api/admin/matches/recheck");
+    if (ok) setMatches(data.matches || []);
+  }, [call]);
+  useEffect(() => { load(); }, [load, refresh]);
+
+  const confirmRecheck = async (m) => {
+    // Confirming = the info was checked again just now: clear the flag AND
+    // refresh the "Verified" stamp (Hy's ask).
+    const { ok, data } = await call(`/api/admin/matches/${m.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ recheckAt: null, recheckNote: "", verifiedAt: new Date().toISOString() }),
+    });
+    if (ok) { setMsg(`Confirmed: ${m.teams?.[0]} vs ${m.teams?.[1]} — verified date refreshed.`); load(); }
+    else setMsg(data.error || "Confirm failed.");
+  };
+  const removeFlag = async (m) => {
+    if (!confirm("Remove this recheck flag without confirming?")) return;
+    const { ok, data } = await call(`/api/admin/matches/${m.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ recheckAt: null, recheckNote: "" }),
+    });
+    if (ok) load(); else setMsg(data.error || "Remove failed.");
+  };
+
+  const now = Date.now();
+  const due = matches.filter((m) => new Date(m.recheckAt).getTime() <= now);
+  const upcoming = matches.filter((m) => new Date(m.recheckAt).getTime() > now);
+
+  const renderRow = (m, isDue) => (
+    <div key={m.id} className={`rounded-xl border p-3 ${isDue ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40" : "border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-bold dark:text-white">
+            {m.teams?.[0]} vs {m.teams?.[1]}
+            {m.status === "live" && <LivePill />}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {m.seriesName}{m.matchNumber ? ` · ${m.matchNumber}` : ""} · Match: {m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
+            {m.venue ? ` · ${m.venue}` : ""}
+          </p>
+          <p className={`mt-0.5 text-xs font-bold ${isDue ? "text-amber-700 dark:text-amber-400" : "text-slate-500 dark:text-slate-400"}`}>
+            {isDue ? `🔁 Recheck due since ${fmtDay(m.recheckAt)} — please confirm the info` : `🔁 Recheck on ${fmtDay(m.recheckAt)}`}
+            {m.recheckNote ? <span className="font-normal"> · Note: {m.recheckNote}</span> : null}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button onClick={() => confirmRecheck(m)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" title="Info re-checked — clears the flag and refreshes the Verified date">✓ Confirmed</button>
+          <button onClick={() => onEditSeries && onEditSeries(m.seriesId)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" title="Open this series' broadcast edit form (change channel/OTT, then Update)">Edit broadcast</button>
+          <button onClick={() => removeFlag(m)} className={dangerCls}>Remove</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-extrabold dark:text-white">Recheck</h2>
+        <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+          {due.length} due · {upcoming.length} upcoming
+        </p>
+      </div>
+      <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+        Matches flagged for a second confirmation. They stay live on the site either way — this list is only a reminder.
+        Flag a match with the 🔁 button in the Matches or Series tab.
+      </p>
+      {msg && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p>}
+      {matches.length === 0 && (
+        <p className="text-sm text-slate-500 dark:text-slate-400">No rechecks pending. 🎉</p>
+      )}
+      {due.length > 0 && (
+        <>
+          <h3 className="mb-2 text-sm font-extrabold text-amber-700 dark:text-amber-400">Due now ({due.length})</h3>
+          <div className="mb-4 space-y-2">{due.map((m) => renderRow(m, true))}</div>
+        </>
+      )}
+      {upcoming.length > 0 && (
+        <>
+          <h3 className="mb-2 text-sm font-extrabold dark:text-white">Upcoming ({upcoming.length})</h3>
+          <div className="space-y-2">{upcoming.map((m) => renderRow(m, false))}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { token, saveToken, call } = useAdminApi();
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState("matches");
   const [refresh, setRefresh] = useState(0);
+  const [recheckDue, setRecheckDue] = useState(0);
+  const [editSeriesRequest, setEditSeriesRequest] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      const { ok, data } = await call("/api/admin/matches/recheck");
+      if (ok) {
+        const now = Date.now();
+        setRecheckDue((data.matches || []).filter((m) => m.recheckAt && new Date(m.recheckAt).getTime() <= now).length);
+      }
+    })();
+  }, [call, refresh, token]);
 
   if (!token) {
     return (
@@ -518,19 +919,35 @@ export default function AdminPage() {
         </button>
       </div>
       <div className="mb-4 flex gap-2">
-        {(["matches", "series"]).map((t) => (
+        {(["matches", "series", "recheck"]).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setRefresh((r) => r + 1); }}
             className={`rounded-full px-4 py-1.5 text-sm font-bold capitalize ${tab === t ? "bg-navy text-white" : "border border-slate-200 bg-white text-slate-600"}`}
           >
             {t}
+            {t === "recheck" && recheckDue > 0 && (
+              <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-white">
+                {recheckDue}
+              </span>
+            )}
           </button>
         ))}
       </div>
       {tab === "matches"
         ? <MatchesTab call={call} refresh={refresh} />
-        : <SeriesTab call={call} refresh={refresh} />}
+        : tab === "series"
+          ? <SeriesTab call={call} refresh={refresh} editSeriesRequest={editSeriesRequest} />
+          : <RecheckTab
+              call={call}
+              refresh={refresh}
+              onEditSeries={(seriesId) => {
+                if (!seriesId) return;
+                setEditSeriesRequest({ id: seriesId, nonce: Date.now() });
+                setTab("series");
+                setRefresh((r) => r + 1);
+              }}
+            />}
     </div>
   );
 }

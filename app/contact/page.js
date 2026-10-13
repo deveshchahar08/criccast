@@ -4,7 +4,7 @@ import ContactForm from "@/components/ContactForm";
 
 export const metadata = { title: "Contact Us — CricCast" };
 
-const CONTACT_EMAIL = "contact@criccast.in";
+const CONTACT_EMAIL = "contact@criccast.co.in";
 
 export default function ContactPage() {
   return (

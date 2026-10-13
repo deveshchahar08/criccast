@@ -2,6 +2,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { DthProvider } from "@/components/DthProvider";
 import ThemeInitScript from "@/components/ThemeInitScript";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import Footer from "@/components/Footer";
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
             the React tree — React 19 would otherwise throw the
             "Encountered a script tag while rendering" console error. */}
         <ThemeInitScript />
+        <GoogleAnalytics />
         <DthProvider>
           <TopBar />
           {/* pb leaves room for the fixed mobile bottom nav */}

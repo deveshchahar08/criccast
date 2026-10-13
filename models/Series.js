@@ -13,6 +13,8 @@ const seriesSchema = new Schema(
     broadcast: { type: broadcastSchema, default: () => ({}) },
     // Display priority — bigger shows first on home/fixtures (e.g. India series = 10, Ranji = 5).
     priority: { type: Number, default: 0 },
+    // Admin "New" box skip stamp (see Match.dismissedNewAt).
+    dismissedNewAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

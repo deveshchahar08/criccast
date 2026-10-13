@@ -1,7 +1,7 @@
 // Disclaimer — the most legally important static page.
 export const metadata = { title: "Disclaimer — CricCast" };
 
-const CONTACT_EMAIL = "contact@criccast.in";
+const CONTACT_EMAIL = "contact@criccast.co.in";
 
 export default function DisclaimerPage() {
   return (

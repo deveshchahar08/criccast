@@ -4,6 +4,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Series from '@/models/Series';
 import Match from '@/models/Match';
+import SyncMeta from '@/models/SyncMeta';
 
 function noDb() {
   return NextResponse.json(
@@ -18,16 +19,36 @@ export async function GET(request) {
   if (!hasDb()) return noDb();
   await dbConnect();
   const docs = await Series.find().sort({ createdAt: -1 }).lean();
+  // Counts cover ONLY the admin window (matches from the last 12h onward) —
+  // the same scope Verify-all and the match lists use. A past match can never
+  // be verified any more, so counting it would wedge the series in
+  // "Action needed" forever (e.g. a finished 1st T20I blocking DONE at 5/6).
+  const windowStart = new Date(Date.now() - 12 * 3600 * 1000);
   const counts = await Match.aggregate([
+    { $match: { startTime: { $gte: windowStart } } },
     { $group: { _id: "$series", n: { $sum: 1 } } },
   ]);
   const countMap = Object.fromEntries(counts.map((c) => [String(c._id), c.n]));
   // Verified vs unverified counts — powers the DONE / progress badges in admin.
   const verifiedCounts = await Match.aggregate([
-    { $match: { verifiedAt: { $ne: null } } },
+    { $match: { verifiedAt: { $ne: null }, startTime: { $gte: windowStart } } },
     { $group: { _id: "$series", n: { $sum: 1 } } },
   ]);
   const verifiedMap = Object.fromEntries(verifiedCounts.map((c) => [String(c._id), c.n]));
+  // "New" matches per series — arrived in the last 3 days, unverified, not
+  // skipped from the admin New box. Powers the Series tab's New section.
+  const newMatchCounts = await Match.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: new Date(Date.now() - 3 * 24 * 3600 * 1000) },
+        dismissedNewAt: null,
+        verifiedAt: null,
+        startTime: { $gte: windowStart },
+      },
+    },
+    { $group: { _id: "$series", n: { $sum: 1 } } },
+  ]);
+  const newMatchMap = Object.fromEntries(newMatchCounts.map((c) => [String(c._id), c.n]));
   // lean() docs have _id but no id virtual — the admin UI uses s.id.
   const series = docs.map((d) => {
     const total = countMap[String(d._id)] || 0;
@@ -40,6 +61,7 @@ export async function GET(request) {
       id: String(d._id),
       matchCount: total,
       verifiedCount: verified,
+      newMatchCount: newMatchMap[String(d._id)] || 0,
       // DONE = broadcast info added AND every match verified (and at least 1 match).
       isDone: hasBroadcast && total > 0 && verified >= total,
     };
@@ -54,5 +76,13 @@ export async function POST(request) {
   await dbConnect();
   const body = await request.json();
   const created = await Series.create(body);
+  // Un-blacklist: Hy manually re-created this series, so sync may manage it again.
+  const name = String(created.name || "").trim();
+  if (name) {
+    await SyncMeta.findOneAndUpdate(
+      { key: "seriesBlacklist" },
+      { $pull: { data: name } }
+    );
+  }
   return NextResponse.json({ series: created }, { status: 201 });
 }
