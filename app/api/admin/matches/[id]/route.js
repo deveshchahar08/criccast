@@ -12,6 +12,9 @@ export async function PUT(request, { params }) {
   const { id } = await params;
   await dbConnect();
   const body = await request.json();
+  // v62: setting a fresh recheck flag (any admin path) re-arms the Telegram
+  // bell for it — otherwise a match flagged twice would only ring once.
+  if (body.recheckAt) body.recheckAlertedAt = null;
   const updated = await Match.findByIdAndUpdate(id, body, {
     new: true,
     runValidators: true,

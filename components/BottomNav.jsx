@@ -40,7 +40,10 @@ export default function BottomNav() {
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white md:hidden dark:border-slate-800 dark:bg-slate-950">
       <div className="grid grid-cols-4">
         {ITEMS.map((item) => {
-          const active = pathname === item.href;
+          // Same rule as the desktop NavLinks: section pages (e.g.
+          // /series/<slug>) keep their tab highlighted.
+          const active =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

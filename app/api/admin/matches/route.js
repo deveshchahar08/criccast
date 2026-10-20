@@ -4,6 +4,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
 import Series from '@/models/Series';
+import { effectiveStatus } from '@/lib/queries';
 
 export async function GET(request) {
   const auth = checkAdminToken(request);
@@ -30,6 +31,12 @@ export async function GET(request) {
     ...d,
     id: String(d._id),
     seriesName: d.series?.name || '',
+    // v61: the admin shows the SAME status as the public site. A started,
+    // unfinished match counts as live (queries.effectiveStatus) even when
+    // the API never sent status 'live' — otherwise the ● LIVE pill and the
+    // Finish button go missing exactly when they are needed (Oct 13,
+    // Pakistan vs Sri Lanka 3rd T20I).
+    status: effectiveStatus(d),
   }));
   return NextResponse.json({ matches });
 }

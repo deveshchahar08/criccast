@@ -866,6 +866,60 @@ function RecheckTab({ call, refresh, onEditSeries }) {
   );
 }
 
+// HOME NOTE editor (v61): the amber strip on the public home page. The text
+// lives server-side (SyncMeta via /api/admin/settings), so changing or
+// clearing it needs no rebuild. Empty = strip hidden.
+function HomeNoteEditor({ call }) {
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { ok, data } = await call("/api/admin/settings");
+      if (ok) setText(data.homeNote || "");
+    })();
+  }, [call]);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg("");
+    const { ok } = await call("/api/admin/settings", {
+      method: "PUT",
+      body: JSON.stringify({ homeNote: text }),
+    });
+    setBusy(false);
+    setMsg(ok ? "Saved." : "Could not save — try again.");
+  };
+
+  return (
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
+      <div className="mb-1 text-sm font-extrabold text-amber-800 dark:text-amber-300">
+        📢 Home note
+      </div>
+      <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+        Shown as a strip at the top of the home page. Leave empty to hide it.
+      </p>
+      <textarea
+        className={inputCls}
+        rows={2}
+        maxLength={300}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="e.g. Not every Ranji Trophy match is televised. Every televised match is listed here, verified by us."
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <button onClick={save} disabled={busy} className={btnCls}>
+          Save note
+        </button>
+        {msg && (
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{msg}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { token, saveToken, call } = useAdminApi();
   const [draft, setDraft] = useState("");
@@ -918,6 +972,7 @@ export default function AdminPage() {
           Lock
         </button>
       </div>
+      <HomeNoteEditor call={call} />
       <div className="mb-4 flex gap-2">
         {(["matches", "series", "recheck"]).map((t) => (
           <button

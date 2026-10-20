@@ -31,6 +31,7 @@ export async function POST(request, { params }) {
     await Match.findByIdAndUpdate(m._id, {
       recheckAt: new Date(new Date(m.startTime).getTime() - THREE_DAYS),
       recheckNote: note,
+      recheckAlertedAt: null, // v62: re-flagging re-arms the Telegram bell
     });
     flagged++;
   }

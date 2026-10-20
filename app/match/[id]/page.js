@@ -51,16 +51,33 @@ export default async function MatchPage({ params }) {
   const [s1, s2] = match.shortNames?.length === 2 ? match.shortNames : ["", ""];
 
   // SportsEvent JSON-LD — helps Google show this page for match queries.
+  // v62: added the five fields Search Console flagged as missing
+  // (description, performer, eventStatus, image, location.address) so the
+  // event is eligible for Google's richer match display.
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL || "https://criccast.co.in").replace(/\/$/, "");
+  const teamsLd = [
+    { "@type": "SportsTeam", name: t1 },
+    { "@type": "SportsTeam", name: t2 },
+  ];
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
     name: `${t1} vs ${t2} — ${match.seriesName}`,
     startDate: match.startTime,
-    location: { "@type": "Place", name: match.venue || match.city || "India" },
-    competitor: [
-      { "@type": "SportsTeam", name: t1 },
-      { "@type": "SportsTeam", name: t2 },
-    ],
+    description: `Where to watch ${t1} vs ${t2} (${match.seriesName}) live in India: TV channels, OTT streaming apps and DTH channel numbers, verified by CricCast.`,
+    eventStatus: "https://schema.org/EventScheduled",
+    image: [`${siteBase}/logo.png`],
+    performer: teamsLd,
+    competitor: teamsLd,
+    location: {
+      "@type": "Place",
+      name: match.venue || match.city || "India",
+      ...(match.city
+        ? { address: { "@type": "PostalAddress", addressLocality: match.city } }
+        : match.venue
+          ? { address: match.venue }
+          : {}),
+    },
   };
 
   // FAQ — targets "where to watch" queries; visible content + FAQPage schema

@@ -1,7 +1,7 @@
 // HOME — server component, revalidated every 60s.
 // Responsive: phone = single column (Pic 2 scroll design), tablet = 2-col,
 // desktop = hero + navbar + 2/3-col grids (Hy's approved Stitch design).
-import { getHomeMatches, getAllSeries, splitFeatured } from "@/lib/queries";
+import { getHomeMatches, getAllSeries, getHomeNote, splitFeatured } from "@/lib/queries";
 import { dayDiffIST } from "@/lib/format";
 import Link from "next/link";
 import DthSelector from "@/components/DthSelector";
@@ -25,9 +25,10 @@ export default async function Home({ searchParams }) {
   const freeOnly = sp?.free === "1";
   const when = sp?.when || undefined; // live | today | tomorrow
 
-  const [{ matches, sample }, { series }] = await Promise.all([
+  const [{ matches, sample }, { series }, homeNote] = await Promise.all([
     getHomeMatches({ seriesId }),
     getAllSeries(),
+    getHomeNote(),
   ]);
 
   // Base list for tab counts (before the when-filter)
@@ -51,7 +52,14 @@ export default async function Home({ searchParams }) {
   const { featured, rest } = splitFeatured(list);
   // Home stays compact: show max 8 compact rows. Full list lives on /fixtures
   // (Hy's call, Oct 5 — otherwise home gets endlessly long as series grow).
-  const restPreview = rest.slice(0, 8);
+  // Exception (v61): when home is filtered to ONE series, the visitor came
+  // for that series — show ALL its matches, no cap.
+  const restPreview = seriesId ? rest : rest.slice(0, 8);
+
+  // Home note strip: first sentence bold as the lead-in, rest regular.
+  const noteDot = homeNote.indexOf(". ");
+  const noteLead = noteDot > 0 ? homeNote.slice(0, noteDot + 1) : "";
+  const noteTail = noteDot > 0 ? homeNote.slice(noteDot + 2) : homeNote;
 
   return (
     <div className="mx-auto max-w-2xl md:max-w-4xl lg:max-w-6xl">
@@ -95,6 +103,17 @@ export default async function Home({ searchParams }) {
           </button>
         </form>
       </section>
+
+      {/* Home note strip (v61) — text edited from the admin; hidden when empty */}
+      {homeNote && (
+        <div className="mx-4 mt-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-100 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-950">
+          <span aria-hidden className="text-sm leading-snug">📢</span>
+          <p className="text-[13px] font-medium leading-snug text-amber-900 dark:text-amber-200">
+            {noteLead && <strong className="font-extrabold">{noteLead} </strong>}
+            {noteTail}
+          </p>
+        </div>
+      )}
 
       {sample && (
         <p className="mx-4 mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-700 md:mx-4 dark:bg-amber-950 dark:text-amber-300">

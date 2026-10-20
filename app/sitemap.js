@@ -25,10 +25,10 @@ export default async function sitemap() {
       priority: 0.9,
     })),
     ...series.map((s) => ({
-      url: `${base}/?series=${s.id}`,
+      url: `${base}/series/${s.slug}`,
       lastModified: now,
       changeFrequency: "daily",
-      priority: 0.6,
+      priority: 0.7,
     })),
   ];
 }

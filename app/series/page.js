@@ -1,4 +1,4 @@
-// Series list — each card links to the home page filtered to that series.
+// Series list — each card links to that series' own page (/series/<slug>).
 import Link from "next/link";
 import { getAllSeries } from "@/lib/queries";
 
@@ -21,7 +21,7 @@ export default async function SeriesPage() {
           return (
             <Link
               key={s.id}
-              href={`/?series=${s.id}`}
+              href={`/series/${s.slug}`}
               className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card transition hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-800"
             >
               <p className="font-extrabold text-navy dark:text-white">{s.name}</p>

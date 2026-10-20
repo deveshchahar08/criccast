@@ -32,6 +32,11 @@ const matchSchema = new Schema(
     // it NEVER affects whether the match shows on the public site.
     recheckAt: { type: Date, default: null }, // show in Recheck tab on/after this date
     recheckNote: { type: String, default: '' }, // why it needs a second look
+    // Telegram ops-bot stamps (v62): when each one-shot alert was sent, so a
+    // bell rings exactly once. Re-flagging a recheck clears recheckAlertedAt
+    // (see the series recheck route) so the bell can ring again.
+    recheckAlertedAt: { type: Date, default: null },
+    unverifiedAlertedAt: { type: Date, default: null },
     // Admin "New" box: a match counts as new for 3 days after it appears
     // (createdAt) unless Hy skips it — this stamps when he did.
     dismissedNewAt: { type: Date, default: null },
