@@ -16,8 +16,20 @@ export async function GET(request) {
   // not the 50 oldest. Finished matches need no verification.
   const { searchParams } = new URL(request.url);
   const seriesId = searchParams.get("seriesId");
+  // v63: also surface IN-PROGRESS matches — a Test that started 3 days
+  // ago is still being played and may need an edit (Oct 21: the SA-AUS
+  // 2nd Test was invisible here, so its wrong start time could not be
+  // fixed). Upcoming window unchanged; live + multi-day windows added.
   const filter = {
-    startTime: { $gte: new Date(Date.now() - 12 * 60 * 60 * 1000) },
+    $or: [
+      { startTime: { $gte: new Date(Date.now() - 12 * 60 * 60 * 1000) } },
+      { status: 'live' },
+      {
+        format: { $in: ['Test', 'First Class'] },
+        status: { $ne: 'finished' },
+        startTime: { $gte: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000) },
+      },
+    ],
   };
   if (seriesId) filter.series = seriesId;
   const docs = await Match.find(filter)

@@ -14,7 +14,7 @@ export default async function SeriesPage() {
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Broadcast rights are per-series — pick one to see where its matches air.
       </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {series.map((s) => {
           const ott = (s.broadcast?.ottPlatforms || []).map((o) => o.name).join(" · ");
           const tv = (s.broadcast?.tvChannels || []).map((c) => c.name.replace(" HD", "")).join(" · ");

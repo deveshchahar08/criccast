@@ -88,7 +88,7 @@ export default async function Fixtures({ searchParams }) {
                 {sec.label}
               </h2>
             )}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {sec.list.map((m) =>
                 m.status === "live" ? (
                   <div key={m.id} className="md:col-span-2">

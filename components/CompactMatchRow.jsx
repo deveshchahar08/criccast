@@ -25,11 +25,11 @@ export default function CompactMatchRow({ match }) {
       href={`/match/${match.id}`}
       className="block rounded-2xl border border-slate-100 bg-white p-3.5 shadow-card transition hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-800"
     >
-      <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-[11px] font-bold tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-[11px] font-bold tracking-wide text-slate-500 dark:text-slate-400">
           {match.seriesName} {match.matchNumber ? `• ${match.matchNumber}` : ""}
         </p>
-        <p className="text-[11px] font-extrabold text-sky-600 dark:text-sky-400">
+        <p className="shrink-0 text-[11px] font-extrabold text-sky-600 dark:text-sky-400">
           {formatDayTimeIST(match.startTime)}
         </p>
       </div>

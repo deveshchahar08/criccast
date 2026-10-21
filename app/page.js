@@ -155,7 +155,7 @@ export default async function Home({ searchParams }) {
             No live or upcoming matches right now. Check fixtures below.
           </p>
         )}
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
           {featured.map((m) => (
             <MatchCard key={m.id} match={m} />
           ))}
@@ -184,7 +184,7 @@ export default async function Home({ searchParams }) {
             Nothing else scheduled. Try another filter.
           </p>
         )}
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {restPreview.map((m) => (
             <CompactMatchRow key={m.id} match={m} />
           ))}
