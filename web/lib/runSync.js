@@ -189,11 +189,17 @@ export async function runSync() {
   // - Anything not finished: 7-day buffer. A Test runs 5 days (plus rain
   //   delays), so a shorter blanket window could delete a live Test.
   // Series created in the last 24h are spared (Hy may be prepping one).
+  // VERIFIED matches are NEVER pruned (the verifiedAt: null filter on
+  // both deletes below) — a verified page is a public asset that Google
+  // ranks and keeps sending visitors to. The Oct 11 wording assumed
+  // finished = unverified junk; that assumption silently deleted
+  // verified pages once they finished (IND-NZ 1st T20I and INDW-ZIMW
+  // 1st ODI, found Oct 26). Do NOT remove the verifiedAt filter.
   const finishedCutoff = new Date(Date.now() - 2 * 24 * 3600 * 1000);
   const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000);
   const prunedMatches =
-    ((await Match.deleteMany({ status: "finished", startTime: { $lt: finishedCutoff } })).deletedCount || 0) +
-    ((await Match.deleteMany({ startTime: { $lt: cutoff } })).deletedCount || 0);
+    ((await Match.deleteMany({ status: "finished", startTime: { $lt: finishedCutoff }, verifiedAt: null })).deletedCount || 0) +
+    ((await Match.deleteMany({ startTime: { $lt: cutoff }, verifiedAt: null })).deletedCount || 0);
 
   // Auto-finish stale "live" matches. The API drops finished matches from
   // its feed, so we'd otherwise never learn they ended and they'd show as
