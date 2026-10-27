@@ -26,6 +26,15 @@ export const broadcastSchema = new Schema(
     ],
     languages: [{ type: String }], // all commentary languages, for quick display
     region: { type: String, default: 'India' },
+    // Verified broadcasters OUTSIDE India (v68) — for series with no India
+    // route (Worldwide rule) and for NRI viewers. One row per region,
+    // e.g. { region: "USA & Canada", info: "Willow TV" }.
+    worldwide: [
+      {
+        region: { type: String, required: true },
+        info: { type: String, required: true },
+      },
+    ],
   },
   { _id: false }
 );

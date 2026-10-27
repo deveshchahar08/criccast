@@ -76,7 +76,8 @@ export async function GET(request) {
     const verified = verifiedMap[String(d._id)] || 0;
     const hasBroadcast =
       (d.broadcast?.tvChannels || []).length > 0 ||
-      (d.broadcast?.ottPlatforms || []).length > 0;
+      (d.broadcast?.ottPlatforms || []).length > 0 ||
+      (d.broadcast?.worldwide || []).length > 0;
     return {
       ...d,
       id: String(d._id),

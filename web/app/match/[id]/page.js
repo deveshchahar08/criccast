@@ -265,6 +265,28 @@ export default async function MatchPage({ params }) {
         </section>
       )}
 
+      {/* Worldwide — broadcasters outside India (v68) */}
+      {(b.worldwide || []).length > 0 && (
+        <section className="mt-4">
+          <h2 className="mb-2 text-base font-extrabold text-navy dark:text-white">Watching from Outside India?</h2>
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card dark:border-slate-800 dark:bg-slate-900">
+            {(b.tvChannels || []).length === 0 && (b.ottPlatforms || []).length === 0 && (
+              <p className="mb-2.5 text-[13px] leading-snug text-slate-600 dark:text-slate-300">
+                There is no official TV or streaming broadcaster for this series in India. Viewers in other countries can watch here:
+              </p>
+            )}
+            <ul className="space-y-2">
+              {b.worldwide.map((w) => (
+                <li key={w.region} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="shrink-0 font-bold text-navy dark:text-white">{w.region}</span>
+                  <span className="text-right text-slate-600 dark:text-slate-300">{w.info}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+
       {/* Digital only notice */}
       {match.digitalOnly && (
         <p className="mt-4 rounded-xl bg-sky-100/70 p-3 text-[13px] leading-snug text-slate-700 dark:bg-sky-950 dark:text-slate-300">
