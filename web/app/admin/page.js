@@ -291,6 +291,62 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
   // are kept out of the list below so nothing shows twice.
   const isInNew = (s) =>
     !s.isDone && (isNewItem(s) || (s.newMatchCount ?? 0) > 0);
+  // Oct 27 (Hy's ask, v68 queue item 1): the SAME expandable match list
+  // the main series list has, shared as one helper so the ✨ New box cards
+  // — which used to have no dropdown at all — expand identically.
+  const expandedMatches = (s) => (
+    <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+      {loadingMatches[s.id] ? (
+        <p className="py-2 text-xs text-slate-400">Loading matches…</p>
+      ) : (seriesMatches[s.id] || []).length === 0 ? (
+        <p className="py-2 text-xs text-slate-400">No upcoming matches in this series.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {seriesMatches[s.id].map((m) => (
+            <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold dark:text-white">
+                  {(m.teams || []).join(" vs ")}
+                  {m.verifiedAt ? (
+                    <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">VERIFIED</span>
+                  ) : (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
+                  )}
+                  {m.status === "live" && <LivePill />}
+                  {m.recheckAt && (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
+                      🔁 {fmtDay(m.recheckAt)}
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
+                  {m.venue ? ` · ${m.venue}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                {!m.verifiedAt && (
+                  <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
+                )}
+                <button
+                  onClick={() => toggleRecheckSeriesMatch(m, s.id)}
+                  title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"}`}
+                >
+                  🔁
+                </button>
+                {m.status === "live" && (
+                  <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
+                )}
+                <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const newSeries = actionOnly ? series.filter(isInNew) : [];
   const newSeriesIds = new Set(newSeries.map((s) => s.id));
 
@@ -320,30 +376,42 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
           </p>
           <div className="space-y-2">
             {newSeries.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <div className="min-w-0">
-                  <p className="truncate font-bold dark:text-white">
-                    {s.name}
-                    {(s.newMatchCount ?? 0) > 0 && (
-                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
-                        +{s.newMatchCount} new {s.newMatchCount === 1 ? "match" : "matches"}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {s.format} {s.season ? `· ${s.season}` : ""} · {(s.broadcast?.tvChannels || []).length} TV · {(s.broadcast?.ottPlatforms || []).length} OTT · {s.matchCount ?? 0} matches
-                    {(s.matchCount ?? 0) > 0 && (
-                      <span className="font-bold text-amber-600 dark:text-amber-400"> · {s.verifiedCount ?? 0}/{s.matchCount} verified</span>
-                    )}
-                  </p>
+              <div key={s.id} className="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center justify-between gap-2 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      onClick={() => toggleMatches(s)}
+                      className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      title={expandedId === s.id ? "Hide matches" : "Show matches"}
+                    >
+                      {expandedId === s.id ? "▲" : "▼"}
+                    </button>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold dark:text-white">
+                        {s.name}
+                        {(s.newMatchCount ?? 0) > 0 && (
+                          <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
+                            +{s.newMatchCount} new {s.newMatchCount === 1 ? "match" : "matches"}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {s.format} {s.season ? `· ${s.season}` : ""} · {(s.broadcast?.tvChannels || []).length} TV · {(s.broadcast?.ottPlatforms || []).length} OTT · {s.matchCount ?? 0} matches
+                        {(s.matchCount ?? 0) > 0 && (
+                          <span className="font-bold text-amber-600 dark:text-amber-400"> · {s.verifiedCount ?? 0}/{s.matchCount} verified</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
+                    <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
+                    <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+                    <button onClick={() => dismissSeriesNew(s)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
+                    <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
-                  <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
-                  <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
-                  <button onClick={() => dismissSeriesNew(s)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
-                  <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
-                </div>
+                {expandedId === s.id && expandedMatches(s)}
               </div>
             ))}
           </div>
@@ -416,58 +484,7 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
                 <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
               </div>
             </div>
-            {expandedId === s.id && (
-              <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
-                {loadingMatches[s.id] ? (
-                  <p className="py-2 text-xs text-slate-400">Loading matches…</p>
-                ) : (seriesMatches[s.id] || []).length === 0 ? (
-                  <p className="py-2 text-xs text-slate-400">No upcoming matches in this series.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {seriesMatches[s.id].map((m) => (
-                      <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold dark:text-white">
-                            {(m.teams || []).join(" vs ")}
-                            {m.verifiedAt ? (
-                              <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">VERIFIED</span>
-                            ) : (
-                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
-                            )}
-                            {m.status === "live" && <LivePill />}
-                            {m.recheckAt && (
-                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
-                                🔁 {fmtDay(m.recheckAt)}
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
-                            {m.venue ? ` · ${m.venue}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 gap-1.5">
-                          {!m.verifiedAt && (
-                            <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
-                          )}
-                          <button
-                            onClick={() => toggleRecheckSeriesMatch(m, s.id)}
-                            title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
-                            className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"}`}
-                          >
-                            🔁
-                          </button>
-                          {m.status === "live" && (
-                            <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
-                          )}
-                          <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {expandedId === s.id && expandedMatches(s)}
           </div>
         ))}
       </div>
@@ -530,7 +547,10 @@ function MatchesTab({ call, refresh }) {
       matchNumber: m.matchNumber || "",
       format: m.format || "",
       status: m.status || "scheduled",
-      broadcastJson: m.broadcastOverride ? JSON.stringify(m.broadcastOverride, null, 2) : "",
+      // Oct 27 (Hy's ask): the override box always opens EMPTY — a stored
+      // override is never pre-filled, so an edit can't re-save a stale
+      // skeleton by accident. An empty box on save sends nothing.
+      broadcastJson: "",
       unlockTime: false,
     });
     setMsg("");
@@ -589,7 +609,7 @@ function MatchesTab({ call, refresh }) {
     const { ok, data } = await call("/api/admin/sync", { method: "POST" });
     setSyncing(false);
     if (ok) {
-      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series${data.skippedBlacklisted ? `, ${data.skippedBlacklisted} blacklisted skipped` : ""}. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
+      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series${data.skippedBlacklisted ? `, ${data.skippedBlacklisted} blacklisted skipped` : ""}${data.skippedMatchBlacklisted ? `, ${data.skippedMatchBlacklisted} deleted-match skipped` : ""}. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
       load();
     } else {
       setMsg(data.error || "Sync failed.");
@@ -642,9 +662,11 @@ function MatchesTab({ call, refresh }) {
       // v66: the Edit form's unlock checkbox — the only way a locked
       // start time opens up to sync again.
       ...(editingMatch && form.unlockTime ? { startTimeLocked: false } : {}),
-      // Only send on edit (or when filled on create): emptying the field on
-      // edit clears a stale override back to series inheritance.
-      ...(editingMatch || broadcastOverride ? { broadcastOverride: broadcastOverride || {} } : {}),
+      // Oct 27 (Hy's ask): send an override ONLY when the box is filled.
+      // Empty box = whatever is stored stays untouched, so series
+      // inheritance and existing per-match overrides both survive an
+      // innocent edit; pasting {} is the explicit way to clear one.
+      ...(form.broadcastJson && form.broadcastJson.trim() ? { broadcastOverride } : {}),
     };
     const oldMatch = editingMatch ? matches.find((x) => x.id === editingMatch) : null;
     const timeChanged =
@@ -778,6 +800,7 @@ function MatchesTab({ call, refresh }) {
         <input className={inputCls} placeholder="Teams, comma separated (e.g. India, Australia)" value={form.teams} onChange={(e) => setForm({ ...form, teams: e.target.value })} required />
         <input className={inputCls} placeholder="Short names, comma separated (e.g. IND, AUS) — optional" value={form.shortNames} onChange={(e) => setForm({ ...form, shortNames: e.target.value })} />
         <input className={inputCls} placeholder="Match label (e.g. 2nd Test, 3rd ODI) — optional" value={form.matchNumber} onChange={(e) => setForm({ ...form, matchNumber: e.target.value })} />
+        <input className={inputCls} placeholder="Format (Test / ODI / T20I) — optional" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} />
         <input className={inputCls} type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} required />
         {editingMatch && matches.find((x) => x.id === editingMatch)?.startTimeLocked ? (
           <div className="rounded-lg bg-sky-50 p-3 text-xs font-bold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
@@ -808,7 +831,7 @@ function MatchesTab({ call, refresh }) {
         )}
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-500 dark:text-slate-400">
-            Broadcast override JSON — optional, per-match only (wins over the series broadcast; leave empty to inherit the series)
+            Broadcast override JSON — optional, per-match only (leave empty to keep as-is; paste JSON to set this match's own broadcast; paste {"{}"} to remove it and inherit the series)
           </label>
           <textarea
             className={inputCls}

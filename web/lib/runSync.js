@@ -84,6 +84,16 @@ export async function runSync() {
     if (blDoc && Array.isArray(blDoc.data)) blacklist = new Set(blDoc.data.map(String));
   } catch {}
   let skippedBlacklisted = 0;
+  // Same shield, one level down: individual matches Hy deleted as junk
+  // (Oct 27: a wrong "Kuwait vs PNG, 44th Match" that the feed kept
+  // insisting on, resurrected after every delete) are tombstoned by
+  // CricAPI id in SyncMeta "matchBlacklist" — sync never re-creates them.
+  let matchBlacklist = new Set();
+  try {
+    const mbDoc = await SyncMeta.findOne({ key: "matchBlacklist" }).lean();
+    if (mbDoc && Array.isArray(mbDoc.data)) matchBlacklist = new Set(mbDoc.data.map(String));
+  } catch {}
+  let skippedMatchBlacklisted = 0;
   const newSeriesNames = []; // v62: feeds the Telegram "new series" bell
   async function seriesFor(name) {
     const clean = String(name || "").trim() || "Other Matches";
@@ -118,6 +128,10 @@ export async function runSync() {
     if (n.teams.length !== 2 || !n.startTime || Number.isNaN(n.startTime.getTime())) {
       skipped++;
       continue;
+    }
+    if (n.externalId && matchBlacklist.has(String(n.externalId))) {
+      skippedMatchBlacklisted++;
+      continue; // Hy deleted this exact match as junk — never resurrect it
     }
     if (n.externalId && n.status === "live") apiLiveIds.add(String(n.externalId));
     const series = await seriesFor(n.seriesName);
@@ -258,6 +272,7 @@ export async function runSync() {
     updated,
     skipped,
     skippedBlacklisted,
+    skippedMatchBlacklisted,
     total: raw.length,
     prunedMatches,
     autoFinished,

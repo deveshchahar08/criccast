@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
+import SyncMeta from '@/models/SyncMeta';
 
 export async function PUT(request, { params }) {
   const auth = checkAdminToken(request);
@@ -37,7 +38,15 @@ export async function PUT(request, { params }) {
       const timeChanged =
         !!body.startTime &&
         new Date(body.startTime).getTime() !== new Date(current.startTime).getTime();
-      if (timeChanged && body.startTimeLocked !== false) body.startTimeLocked = true;
+      // Lock on save INTENT (Oct 27 fix): the lock used to engage only
+      // when the submitted time DIFFERED from the stored one — so once
+      // the feed itself corrected a time, no admin save could ever lock
+      // it, and a later feed flip could still revert the correct value
+      // (SA-AUS 3rd Test: time sat correct at 2:00 PM with no lock).
+      // The Edit form always submits startTime, so any save carrying
+      // one now locks it; the form's explicit unlock checkbox
+      // (startTimeLocked: false) remains the only release.
+      if (body.startTime && body.startTimeLocked !== false) body.startTimeLocked = true;
       if (
         current.verifiedAt &&
         body.verifiedAt === undefined &&
@@ -66,5 +75,17 @@ export async function DELETE(request, { params }) {
   await dbConnect();
   const deleted = await Match.findByIdAndDelete(id);
   if (!deleted) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+  // Tombstone (Oct 27): a feed match Hy deletes as junk must never be
+  // resurrected by sync — the match-level mirror of the series
+  // blacklist, keyed by the CricAPI id sync itself uses to find/create
+  // matches. Matches without an externalId (manual / agent-door
+  // creations) cannot come back via sync anyway, so they need none.
+  if (deleted.externalId) {
+    await SyncMeta.findOneAndUpdate(
+      { key: 'matchBlacklist' },
+      { $addToSet: { data: String(deleted.externalId) } },
+      { upsert: true }
+    );
+  }
   return NextResponse.json({ ok: true });
 }
