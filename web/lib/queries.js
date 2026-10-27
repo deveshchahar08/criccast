@@ -17,29 +17,33 @@ import { sampleMatches, sampleSeries } from './sampleData.js';
 // so the count can never disagree with the cards again (Oct 22: the
 // pill said 7 LIVE while only 3 live cards were visible).
 //
-// Rules (Hy's design, Oct 22):
+// Rules (Hy's design, Oct 22; ceilings tightened Oct 27 — finished
+// matches were wearing the LIVE tag into the night, Hy's complaint):
 // - The API's "finished" is final.
 // - A started match is LIVE while either of these holds:
 //   (a) its age is within the format ceiling — ceilings carry rain
-//       buffers, they are NOT typical durations (T20 8h, T10 5h,
-//       ODI 14h, Test/First Class 5 days, anything else 12h), or
-//   (b) a sync has SEEN the match in the feed within the last 30h and
+//       buffers, they are NOT typical durations (T20 5h, T10 3.5h,
+//       ODI 11h, Test/First Class 5 days, anything else 10h), or
+//   (b) a sync has SEEN the match in the feed within the last 8h and
 //       its age is under ceiling + 24h — a reserve-day final (Hy's
 //       example: IPL 2023, washed out and finished two days later)
-//       keeps renewing itself while the API keeps listing it.
+//       keeps renewing itself while the API keeps listing it. 8h is
+//       deliberately longer than the widest gap between syncs (6.5h),
+//       so a match the feed still carries can never go stale mid-play;
+//       once the feed goes silent, the tag retires within hours.
 // - Past both, the match counts as finished even if the API never said
 //   so: the API drops finished matches silently, and a stale LIVE tag
 //   is a lie to the visitor.
 const LIVE_CEILING_MS = {
-  T20: 8 * 3600 * 1000,
-  T20I: 8 * 3600 * 1000,
-  T10: 5 * 3600 * 1000,
-  ODI: 14 * 3600 * 1000,
+  T20: 5 * 3600 * 1000,
+  T20I: 5 * 3600 * 1000,
+  T10: 3.5 * 3600 * 1000,
+  ODI: 11 * 3600 * 1000,
   Test: 5 * 24 * 3600 * 1000,
   "First Class": 5 * 24 * 3600 * 1000,
 };
-const DEFAULT_CEILING_MS = 12 * 3600 * 1000;
-const SEEN_FRESH_MS = 30 * 3600 * 1000;
+const DEFAULT_CEILING_MS = 10 * 3600 * 1000;
+const SEEN_FRESH_MS = 8 * 3600 * 1000;
 const SEEN_OUTER_MS = 24 * 3600 * 1000;
 
 export function liveCeilingMs(format) {

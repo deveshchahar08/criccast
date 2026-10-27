@@ -219,15 +219,17 @@ export async function runSync() {
   // its feed, so we'd otherwise never learn they ended and they'd show as
   // LIVE forever. Only matches the API went SILENT on get finished —
   // if the API still reports a match as live (rain delay etc.), we trust
-  // it no matter how old. T20: 6h, ODI/others: 24h, Tests: 6 days.
+  // it. Thresholds tightened Oct 27 to match the read-side ceilings in
+  // queries.js (T20 5h, ODI/others 12h, Tests 6 days) so the stored
+  // status and the public display retire the LIVE tag together.
   const staleLive = await Match.updateMany(
     {
       status: "live",
       externalId: { $nin: [...apiLiveIds] },
       $or: [
         { format: { $in: ["Test", "First Class"] }, startTime: { $lt: new Date(Date.now() - 6 * 24 * 3600 * 1000) } },
-        { format: { $in: ["T20", "T20I"] }, startTime: { $lt: new Date(Date.now() - 6 * 3600 * 1000) } },
-        { format: { $nin: ["Test", "First Class"] }, startTime: { $lt: new Date(Date.now() - 24 * 3600 * 1000) } },
+        { format: { $in: ["T20", "T20I"] }, startTime: { $lt: new Date(Date.now() - 5 * 3600 * 1000) } },
+        { format: { $nin: ["Test", "First Class"] }, startTime: { $lt: new Date(Date.now() - 12 * 3600 * 1000) } },
       ],
     },
     { $set: { status: "finished" } }
