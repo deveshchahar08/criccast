@@ -102,7 +102,7 @@ const isNewItem = (item) =>
   !!item.createdAt &&
   Date.now() - new Date(item.createdAt).getTime() < NEW_WINDOW_MS;
 
-function SeriesTab({ call, refresh, editSeriesRequest }) {
+function SeriesTab({ call, refresh, editSeriesRequest, onEditMatch }) {
   const [series, setSeries] = useState([]);
   const [form, setForm] = useState({ name: "", format: "", season: "", priority: "", broadcastJson: "" });
   const [editing, setEditing] = useState(null);
@@ -338,6 +338,10 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
                 {m.status === "live" && (
                   <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
                 )}
+                {/* Oct 28 (Hy's ask): Edit jump — far-future matches never reach
+                    the Matches tab's 200-soonest list, so their edit form was
+                    unreachable. Opens the same form in the Matches tab. */}
+                <button onClick={() => onEditMatch && onEditMatch({ ...m, seriesId: m.seriesId || s.id })} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700">Edit</button>
                 <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
               </div>
             </div>
@@ -519,7 +523,7 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
   );
 }
 
-function MatchesTab({ call, refresh }) {
+function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled }) {
   const [matches, setMatches] = useState([]);
   const [series, setSeries] = useState([]);
   const [msg, setMsg] = useState("");
@@ -560,6 +564,16 @@ function MatchesTab({ call, refresh }) {
     setEditingMatch(null);
     setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "", status: "scheduled", broadcastJson: "", unlockTime: false });
   };
+
+  // Oct 28: cross-tab jump from a Series-tab match row's Edit button —
+  // open that match's edit form here, then clear the request so coming
+  // back to this tab later does not reopen it.
+  useEffect(() => {
+    if (!editMatchRequest) return;
+    if (editMatchRequest.match?.id) startMatchEdit(editMatchRequest.match);
+    if (onEditMatchRequestHandled) onEditMatchRequestHandled();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMatchRequest]);
 
   const load = useCallback(async () => {
     const [{ ok, data }, sRes] = await Promise.all([
@@ -1002,6 +1016,7 @@ export default function AdminPage() {
   const [refresh, setRefresh] = useState(0);
   const [recheckDue, setRecheckDue] = useState(0);
   const [editSeriesRequest, setEditSeriesRequest] = useState(null);
+  const [editMatchRequest, setEditMatchRequest] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -1065,9 +1080,19 @@ export default function AdminPage() {
         ))}
       </div>
       {tab === "matches"
-        ? <MatchesTab call={call} refresh={refresh} />
+        ? <MatchesTab call={call} refresh={refresh} editMatchRequest={editMatchRequest} onEditMatchRequestHandled={() => setEditMatchRequest(null)} />
         : tab === "series"
-          ? <SeriesTab call={call} refresh={refresh} editSeriesRequest={editSeriesRequest} />
+          ? <SeriesTab
+              call={call}
+              refresh={refresh}
+              editSeriesRequest={editSeriesRequest}
+              onEditMatch={(m) => {
+                if (!m?.id) return;
+                setEditMatchRequest({ match: m, nonce: Date.now() });
+                setTab("matches");
+                setRefresh((r) => r + 1);
+              }}
+            />
           : <RecheckTab
               call={call}
               refresh={refresh}
