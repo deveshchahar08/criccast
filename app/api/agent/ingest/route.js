@@ -39,7 +39,10 @@ function guard(request) {
 const norm = (s) => String(s || '').trim().toLowerCase();
 const teamKey = (teams) => (teams || []).map(norm).sort().join('|');
 const broadcastEmpty = (b) =>
-  !b || ((b.tvChannels || []).length === 0 && (b.ottPlatforms || []).length === 0);
+  !b ||
+  ((b.tvChannels || []).length === 0 &&
+    (b.ottPlatforms || []).length === 0 &&
+    (b.worldwide || []).length === 0);
 
 // GET /api/agent/ingest?search=New%20Zealand
 // Pool lookup for the agent's duplicate check: which series match the text,
@@ -179,6 +182,7 @@ export async function POST(request) {
       venue: m.venue || '',
       city: m.city || '',
       status: 'scheduled',
+      lastSeenAt: new Date(),
     });
     existingKeys.push({ key, t });
     created.push({ id: String(doc._id), teams, startTime: start.toISOString() });

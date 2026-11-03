@@ -165,16 +165,17 @@ export default async function MatchPage({ params }) {
               </span>
               <div>
                 <p className="text-lg font-extrabold text-navy dark:text-white">{name}</p>
-                {match.venue && i === 1 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{match.venue}</p>
-                )}
               </div>
             </div>
           ))}
         </div>
-        {match.city && (
+        {/* v66 (Hy's catch, Oct 23): venue + city live together on one
+            CENTERED line under the teams. The venue used to sit under
+            the right-hand team only — lopsided on desktop and squeezed
+            on mobile. */}
+        {(match.venue || match.city) && (
           <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
-            {match.city}
+            {[match.venue, match.city].filter(Boolean).join(" · ")}
           </p>
         )}
         <div className="mt-2 flex items-center justify-center gap-3">
@@ -261,6 +262,28 @@ export default async function MatchPage({ params }) {
           <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
             Numbers vary by region — confirm on your set-top box guide.
           </p>
+        </section>
+      )}
+
+      {/* Worldwide — broadcasters outside India (v68) */}
+      {(b.worldwide || []).length > 0 && (
+        <section className="mt-4">
+          <h2 className="mb-2 text-base font-extrabold text-navy dark:text-white">Watching from Outside India?</h2>
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-card dark:border-slate-800 dark:bg-slate-900">
+            {(b.tvChannels || []).length === 0 && (b.ottPlatforms || []).length === 0 && (
+              <p className="mb-2.5 text-[13px] leading-snug text-slate-600 dark:text-slate-300">
+                There is no official TV or streaming broadcaster for this series in India. Viewers in other countries can watch here:
+              </p>
+            )}
+            <ul className="space-y-2">
+              {b.worldwide.map((w) => (
+                <li key={w.region} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="shrink-0 font-bold text-navy dark:text-white">{w.region}</span>
+                  <span className="text-right text-slate-600 dark:text-slate-300">{w.info}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
       )}
 

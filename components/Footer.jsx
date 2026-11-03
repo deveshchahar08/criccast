@@ -2,9 +2,11 @@ import Link from "next/link";
 
 const exploreLinks = [
   { href: "/", label: "Home" },
+  { href: "/live", label: "Live Matches" },
   { href: "/fixtures", label: "Fixtures" },
   { href: "/dth-codes", label: "DTH Codes" },
   { href: "/series", label: "Series" },
+  { href: "/news", label: "News" },
 ];
 
 const companyLinks = [

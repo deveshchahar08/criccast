@@ -14,11 +14,36 @@ export async function PUT(request, { params }) {
   const { id } = await params;
   await dbConnect();
   const body = await request.json();
+  // v67 verified-stamp refresh (series level): when the BROADCAST
+  // changes, every verified match of this series was effectively
+  // re-checked at that moment — their stamps refresh after the update
+  // lands. Name/format/priority edits refresh nothing.
+  let broadcastChanged = false;
+  if (body.broadcast !== undefined) {
+    const bcastEmpty = (b) =>
+      !b || ((b.tvChannels || []).length === 0 && (b.ottPlatforms || []).length === 0);
+    const current = await Series.findById(id).select('broadcast').lean();
+    if (current) {
+      const a = current.broadcast;
+      const b = body.broadcast;
+      broadcastChanged =
+        bcastEmpty(a) && bcastEmpty(b)
+          ? false
+          : bcastEmpty(a) !== bcastEmpty(b) ||
+            JSON.stringify(a || {}) !== JSON.stringify(b || {});
+    }
+  }
   const updated = await Series.findByIdAndUpdate(id, body, {
     new: true,
     runValidators: true, // without this, updates skip schema validation
   });
   if (!updated) return NextResponse.json({ error: 'Series not found' }, { status: 404 });
+  if (broadcastChanged) {
+    await Match.updateMany(
+      { series: id, verifiedAt: { $ne: null } },
+      { $set: { verifiedAt: new Date() } }
+    );
+  }
   return NextResponse.json({ series: updated });
 }
 

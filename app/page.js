@@ -2,6 +2,7 @@
 // Responsive: phone = single column (Pic 2 scroll design), tablet = 2-col,
 // desktop = hero + navbar + 2/3-col grids (Hy's approved Stitch design).
 import { getHomeMatches, getAllSeries, getHomeNote, splitFeatured } from "@/lib/queries";
+import { getLiveNewsPosts } from "@/lib/news";
 import { dayDiffIST } from "@/lib/format";
 import Link from "next/link";
 import DthSelector from "@/components/DthSelector";
@@ -9,6 +10,8 @@ import FilterChips from "@/components/FilterChips";
 import WhenTabs from "@/components/WhenTabs";
 import MatchCard from "@/components/MatchCard";
 import CompactMatchRow from "@/components/CompactMatchRow";
+import NewsRow, { NewsCard, NewsFeatured, NewsRail } from "@/components/NewsRow";
+import HeroSearch from "@/components/HeroSearch";
 
 export const revalidate = 60;
 
@@ -49,12 +52,21 @@ export default async function Home({ searchParams }) {
     list = list.filter((m) => m.status !== "finished" && dayDiffIST(m.startTime) === 0);
   else if (when === "tomorrow") list = list.filter((m) => dayDiffIST(m.startTime) === 1);
 
-  const { featured, rest } = splitFeatured(list);
+  const { featured, rest, liveCount } = splitFeatured(list);
+  const shownLive = featured.filter((m) => m.status === "live").length;
   // Home stays compact: show max 8 compact rows. Full list lives on /fixtures
   // (Hy's call, Oct 5 — otherwise home gets endlessly long as series grow).
   // Exception (v61): when home is filtered to ONE series, the visitor came
   // for that series — show ALL its matches, no cap.
   const restPreview = seriesId ? rest : rest.slice(0, 8);
+
+  // Latest news (trial, Oct 2026) — Hy's sketch layout: the newest post
+  // is the featured card, the next three sit under it (photo cards on
+  // desktop, list rows on mobile), and the latest posts fill the
+  // full-height Latest News drawer rail on the right (Fix Round 2).
+  const allNews = await getLiveNewsPosts();
+  const [topNews, ...restNews] = allNews;
+  const cardNews = restNews.slice(0, 3);
 
   // Home note strip: first sentence bold as the lead-in, rest regular.
   const noteDot = homeNote.indexOf(". ");
@@ -84,24 +96,9 @@ export default async function Home({ searchParams }) {
           verified broadcast info — TV channels, DTH numbers, FreeDish &amp; OTT
           links in a single glance.
         </p>
-        <form method="GET" action="/search" role="search" className="mx-auto mt-5 flex max-w-xl items-center gap-2 rounded-full border-[1.5px] border-slate-200 bg-white py-1.5 pl-5 pr-1.5 shadow-card focus-within:border-sky-600 dark:border-slate-700 dark:bg-slate-900">
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
-          </svg>
-          <input
-            name="q"
-            autoComplete="off"
-            placeholder="Search team (India, CSK, MI), tournament, or channel…"
-            className="w-full bg-transparent text-sm text-navy placeholder:text-slate-400 focus:outline-none dark:text-white"
-          />
-          <button
-            type="submit"
-            className="shrink-0 rounded-full bg-sky-600 px-5 py-2 text-sm font-bold text-white hover:bg-sky-700"
-          >
-            Search
-          </button>
-        </form>
+        {/* In-place hero search (trial-12): results open in a panel
+            under this bar — no navigation to a separate search page */}
+        <HeroSearch />
       </section>
 
       {/* Home note strip (v61) — text edited from the admin; hidden when empty */}
@@ -160,6 +157,21 @@ export default async function Home({ searchParams }) {
             <MatchCard key={m.id} match={m} />
           ))}
         </div>
+        {liveCount > shownLive && (
+          <p className="mt-3 text-center">
+            <Link
+              href="/live"
+              className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              See all {liveCount} live matches
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </Link>
+          </p>
+        )}
       </section>
 
       {/* Compact rows */}
@@ -198,6 +210,63 @@ export default async function Home({ searchParams }) {
           </p>
         )}
       </section>
+
+      {/* Latest news (trial, Oct 2026) — Hy's sketch: split featured +
+          3 cards on the left, full-height Latest News drawer rail on
+          the right (desktop); stacked featured → rows → rail on mobile. */}
+      {allNews.length > 0 && (
+        <section aria-label="Top stories" className="px-4 pb-6">
+          <div className="flex items-center justify-between pt-5">
+            <h2 className="text-base font-extrabold tracking-tight text-navy md:text-lg dark:text-white">
+              Top Stories
+            </h2>
+            <Link
+              href="/news"
+              className="inline-flex items-center gap-1 text-sm font-bold text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300"
+            >
+              View all news
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+          <div className="mt-3 lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-5">
+            {/* Left area (~2/3 on lg): featured card + the next three */}
+            <div className="lg:col-span-2">
+              {/* Latest post: the shared SPLIT featured card (photo left,
+                  text right on sm+; stacked on mobile) — Fix Round 2 */}
+              <NewsFeatured post={topNews} />
+              {cardNews.length > 0 && (
+                <>
+                  {/* Below lg: the next three as compact list rows */}
+                  <div className="mt-3 flex flex-col gap-3 lg:hidden">
+                    {cardNews.map((p) => (
+                      <NewsRow key={p.slug} post={p} />
+                    ))}
+                  </div>
+                  {/* lg: the next three as compact photo cards in a row */}
+                  <div className="mt-4 hidden gap-4 lg:grid lg:grid-cols-3">
+                    {cardNews.map((p) => (
+                      <NewsCard key={p.slug} post={p} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Right area (~1/3 on lg): the Latest News rail — the
+                aside is only a positioning anchor (relative, no
+                in-flow height of its own); the rail card inside is
+                absolute inset-0 on lg, so its height is BOUND to
+                the left column and its list scrolls inside the
+                card (see NewsRail "fill" in components/NewsRow.jsx
+                for why in-flow sizing fails here) */}
+            <aside className="relative mt-4 lg:mt-0">
+              <NewsRail posts={allNews} variant="fill" />
+            </aside>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

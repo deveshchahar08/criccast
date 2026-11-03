@@ -71,6 +71,11 @@ export async function POST(request) {
       format: seriesDoc?.format || '',
       ...rest,
       series: seriesId,
+      // v66: a match created by hand in admin carries Hy's own start
+      // time — lock it, so when a later sync links the feed's row to
+      // this manual row (the ±12h dedupe above) it cannot stomp the
+      // time with a wrong feed value. Unlock lives in the Edit form.
+      startTimeLocked: true,
     });
     return NextResponse.json({ match: created }, { status: 201 });
   } catch (err) {

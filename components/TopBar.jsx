@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getLiveCount } from "@/lib/queries";
 import ThemeToggle from "./ThemeToggle";
 import NavLinks from "./NavLinks";
+import SearchBox from "./SearchBox";
 
 export default async function TopBar() {
   const liveCount = await getLiveCount();
@@ -21,10 +22,13 @@ export default async function TopBar() {
             </span>
           </Link>
           {liveCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-red-600 dark:bg-red-950 dark:text-red-400">
+            <Link
+              href="/live"
+              className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-red-600 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+            >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
               {liveCount} LIVE NOW
-            </span>
+            </Link>
           )}
         </div>
 
@@ -33,16 +37,7 @@ export default async function TopBar() {
 
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Link
-            href="/search"
-            aria-label="Search"
-            className="rounded-full p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" strokeLinecap="round" />
-            </svg>
-          </Link>
+          <SearchBox />
         </div>
       </div>
     </header>

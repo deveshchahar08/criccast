@@ -18,7 +18,7 @@ export default function AboutPage() {
             For every upcoming match, it tells you exactly{" "}
             <strong>where to watch</strong> — which TV channel is
             telecasting it, the channel number on your DTH set-top box
-            (Tata Play, Airtel DTH, Dish TV, or DD FreeDish), and which OTT
+            (Tata Play, Airtel DTH, Dish TV, Videocon d2h, Sun Direct, or DD FreeDish), and which OTT
             app is streaming it, including whether it is free or needs a
             subscription.
           </p>

@@ -34,7 +34,7 @@ export default async function SeriesDetailPage({ params }) {
   const b = series.broadcast || { tvChannels: [], ottPlatforms: [] };
   const tvNames = (b.tvChannels || []).map((c) => c.name.replace(" HD", ""));
   const ottNames = (b.ottPlatforms || []).map((o) => o.name);
-  const { featured, rest } = splitFeatured(matches);
+  const { featured, rest } = splitFeatured(matches, { liveCap: 99, fillCap: 3, hideOverflowLive: false });
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-4 md:max-w-4xl lg:max-w-5xl">

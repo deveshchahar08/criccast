@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
         Privacy Policy
       </h1>
       <p className="mt-1 text-xs font-semibold text-slate-400 dark:text-slate-500">
-        Last updated: October 13, 2026
+        Last updated: October 22, 2026
       </p>
 
       <div className="mt-6 space-y-6 text-[15px] leading-relaxed text-slate-600 dark:text-slate-300">
@@ -34,7 +34,8 @@ export default function PrivacyPolicyPage() {
           <ul className="mt-2 list-disc space-y-1.5 pl-5">
             <li>
               <strong>Preferences stored on your device:</strong> your chosen
-              DTH operator (Tata Play, Airtel DTH, Dish TV, or DD FreeDish)
+              DTH operator (Tata Play, Airtel DTH, Dish TV, Videocon d2h,
+              Sun Direct, or DD FreeDish)
               and your light/dark theme choice are saved in your
               browser&rsquo;s local storage. This data never leaves your
               device and is never sent to our servers.

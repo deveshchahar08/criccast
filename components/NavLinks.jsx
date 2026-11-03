@@ -8,6 +8,7 @@ const NAV = [
   { href: "/fixtures", label: "Fixtures" },
   { href: "/dth-codes", label: "DTH Codes" },
   { href: "/series", label: "Series" },
+  { href: "/news", label: "News" },
 ];
 
 export default function NavLinks() {

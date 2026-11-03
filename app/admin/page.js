@@ -102,7 +102,7 @@ const isNewItem = (item) =>
   !!item.createdAt &&
   Date.now() - new Date(item.createdAt).getTime() < NEW_WINDOW_MS;
 
-function SeriesTab({ call, refresh, editSeriesRequest }) {
+function SeriesTab({ call, refresh, editSeriesRequest, onEditMatch }) {
   const [series, setSeries] = useState([]);
   const [form, setForm] = useState({ name: "", format: "", season: "", priority: "", broadcastJson: "" });
   const [editing, setEditing] = useState(null);
@@ -274,11 +274,83 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
     if (ok) load(); else setMsg(data.error || "Skip failed.");
   };
 
+  // v65 ACTION QUEUE (Hy's design, Oct 22): the Action-needed list is a
+  // queue, not a swamp. A series belongs here only while it can still
+  // need Hy soon — its next match starts within 14 days, or one of its
+  // matches has a recheck due. Everything else waits quietly in the
+  // full list (Show all). Nothing is deleted, nothing is lost.
+  const QUEUE_WINDOW_MS = 14 * 24 * 3600 * 1000;
+  const inQueue = (s) =>
+    !s.isDone &&
+    (s.hasRecheckDue ||
+      (!!s.nextMatchAt &&
+        new Date(s.nextMatchAt).getTime() - Date.now() <= QUEUE_WINDOW_MS));
+
   // NEW box membership: brand-new series (last 3 days, not skipped) plus any
   // series holding brand-new matches — minus ones already DONE. Box members
   // are kept out of the list below so nothing shows twice.
   const isInNew = (s) =>
     !s.isDone && (isNewItem(s) || (s.newMatchCount ?? 0) > 0);
+  // Oct 27 (Hy's ask, v68 queue item 1): the SAME expandable match list
+  // the main series list has, shared as one helper so the ✨ New box cards
+  // — which used to have no dropdown at all — expand identically.
+  const expandedMatches = (s) => (
+    <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+      {loadingMatches[s.id] ? (
+        <p className="py-2 text-xs text-slate-400">Loading matches…</p>
+      ) : (seriesMatches[s.id] || []).length === 0 ? (
+        <p className="py-2 text-xs text-slate-400">No upcoming matches in this series.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {seriesMatches[s.id].map((m) => (
+            <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold dark:text-white">
+                  {(m.teams || []).join(" vs ")}
+                  {m.verifiedAt ? (
+                    <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">VERIFIED</span>
+                  ) : (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
+                  )}
+                  {m.status === "live" && <LivePill />}
+                  {m.recheckAt && (
+                    <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
+                      🔁 {fmtDay(m.recheckAt)}
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
+                  {m.venue ? ` · ${m.venue}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                {!m.verifiedAt && (
+                  <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
+                )}
+                <button
+                  onClick={() => toggleRecheckSeriesMatch(m, s.id)}
+                  title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"}`}
+                >
+                  🔁
+                </button>
+                {m.status === "live" && (
+                  <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
+                )}
+                {/* Oct 28 (Hy's ask): Edit jump — far-future matches never reach
+                    the Matches tab's 200-soonest list, so their edit form was
+                    unreachable. Opens the same form in the Matches tab. */}
+                <button onClick={() => onEditMatch && onEditMatch({ ...m, seriesId: m.seriesId || s.id })} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700">Edit</button>
+                <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const newSeries = actionOnly ? series.filter(isInNew) : [];
   const newSeriesIds = new Set(newSeries.map((s) => s.id));
 
@@ -290,7 +362,7 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
           <button
             onClick={() => setActionOnly((v) => !v)}
             className={`rounded-lg px-3 py-1.5 text-xs font-bold ${actionOnly ? "bg-sky-600 text-white hover:bg-sky-700" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"}`}
-            title="Show only series needing action (new or unverified matches)"
+            title="Action needed = next match within 14 days, or a recheck due"
           >
             {actionOnly ? "Action needed ✓" : "Show all"}
           </button>
@@ -308,44 +380,62 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
           </p>
           <div className="space-y-2">
             {newSeries.map((s) => (
-              <div key={s.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <div className="min-w-0">
-                  <p className="truncate font-bold dark:text-white">
-                    {s.name}
-                    {(s.newMatchCount ?? 0) > 0 && (
-                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
-                        +{s.newMatchCount} new {s.newMatchCount === 1 ? "match" : "matches"}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {s.format} {s.season ? `· ${s.season}` : ""} · {(s.broadcast?.tvChannels || []).length} TV · {(s.broadcast?.ottPlatforms || []).length} OTT · {s.matchCount ?? 0} matches
-                    {(s.matchCount ?? 0) > 0 && (
-                      <span className="font-bold text-amber-600 dark:text-amber-400"> · {s.verifiedCount ?? 0}/{s.matchCount} verified</span>
-                    )}
-                  </p>
+              <div key={s.id} className="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center justify-between gap-2 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      onClick={() => toggleMatches(s)}
+                      className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      title={expandedId === s.id ? "Hide matches" : "Show matches"}
+                    >
+                      {expandedId === s.id ? "▲" : "▼"}
+                    </button>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold dark:text-white">
+                        {s.name}
+                        {(s.newMatchCount ?? 0) > 0 && (
+                          <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400">
+                            +{s.newMatchCount} new {s.newMatchCount === 1 ? "match" : "matches"}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {s.format} {s.season ? `· ${s.season}` : ""} · {(s.broadcast?.tvChannels || []).length} TV · {(s.broadcast?.ottPlatforms || []).length} OTT · {s.matchCount ?? 0} matches
+                        {(s.matchCount ?? 0) > 0 && (
+                          <span className="font-bold text-amber-600 dark:text-amber-400"> · {s.verifiedCount ?? 0}/{s.matchCount} verified</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
+                    <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
+                    <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
+                    <button onClick={() => dismissSeriesNew(s)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
+                    <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button onClick={() => verifyAll(s)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-700">Verify all</button>
-                  <button onClick={() => recheckSeries(s)} title="Flag all upcoming matches of this series for recheck" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">🔁 Recheck</button>
-                  <button onClick={() => startEdit(s)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
-                  <button onClick={() => dismissSeriesNew(s)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
-                  <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
-                </div>
+                {expandedId === s.id && expandedMatches(s)}
               </div>
             ))}
           </div>
         </div>
       )}
+      {actionOnly && (
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+          Action needed = a series whose next match is within 14 days, or with a recheck due — nearest match first. Everything else waits quietly in the full list (Show all). Nothing here is ever deleted.
+        </p>
+      )}
       <div className="mb-4 space-y-2">
         {series.filter((s) => {
           if (newSeriesIds.has(s.id)) return false;
-          if (actionOnly) {
-            // Show only what needs Hy's attention: new series, or series with unverified matches
-            const hasUnverified = (s.matchCount ?? 0) > (s.verifiedCount ?? 0);
-            return !s.isDone && (isNewSeries(s.createdAt) || hasUnverified);
-          }
+          if (actionOnly) return inQueue(s);
           return true;
+        }).sort((a, b) => {
+          if (!actionOnly) return 0;
+          const an = a.nextMatchAt ? new Date(a.nextMatchAt).getTime() : Infinity;
+          const bn = b.nextMatchAt ? new Date(b.nextMatchAt).getTime() : Infinity;
+          return an - bn || (b.priority || 0) - (a.priority || 0);
         }).map((s) => (
           <div key={s.id} className="rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between p-3">
@@ -398,58 +488,7 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
                 <button onClick={() => remove(s)} className={dangerCls}>Delete</button>
               </div>
             </div>
-            {expandedId === s.id && (
-              <div className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
-                {loadingMatches[s.id] ? (
-                  <p className="py-2 text-xs text-slate-400">Loading matches…</p>
-                ) : (seriesMatches[s.id] || []).length === 0 ? (
-                  <p className="py-2 text-xs text-slate-400">No upcoming matches in this series.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {seriesMatches[s.id].map((m) => (
-                      <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold dark:text-white">
-                            {(m.teams || []).join(" vs ")}
-                            {m.verifiedAt ? (
-                              <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">VERIFIED</span>
-                            ) : (
-                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400">UNVERIFIED</span>
-                            )}
-                            {m.status === "live" && <LivePill />}
-                            {m.recheckAt && (
-                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
-                                🔁 {fmtDay(m.recheckAt)}
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {m.matchNumber ? `${m.matchNumber} · ` : ""}{m.startTime ? new Date(m.startTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}
-                            {m.venue ? ` · ${m.venue}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 gap-1.5">
-                          {!m.verifiedAt && (
-                            <button onClick={() => verifyMatch(m.id, s.id)} className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700">Verify</button>
-                          )}
-                          <button
-                            onClick={() => toggleRecheckSeriesMatch(m, s.id)}
-                            title={m.recheckAt ? `Recheck set for ${fmtDay(m.recheckAt)} — tap to remove` : "Flag for recheck (3 days before match)"}
-                            className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${m.recheckAt ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400" : "border-slate-200 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"}`}
-                          >
-                            🔁
-                          </button>
-                          {m.status === "live" && (
-                            <button onClick={() => markFinishedSeries(m.id, s.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>
-                          )}
-                          <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {expandedId === s.id && expandedMatches(s)}
           </div>
         ))}
       </div>
@@ -484,12 +523,12 @@ function SeriesTab({ call, refresh, editSeriesRequest }) {
   );
 }
 
-function MatchesTab({ call, refresh }) {
+function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled }) {
   const [matches, setMatches] = useState([]);
   const [series, setSeries] = useState([]);
   const [msg, setMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", status: "scheduled", broadcastJson: "" });
+  const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", status: "scheduled", broadcastJson: "", unlockTime: false });
   const [actionOnly, setActionOnly] = useState(true);
   const [editingMatch, setEditingMatch] = useState(null);
 
@@ -512,15 +551,29 @@ function MatchesTab({ call, refresh }) {
       matchNumber: m.matchNumber || "",
       format: m.format || "",
       status: m.status || "scheduled",
-      broadcastJson: m.broadcastOverride ? JSON.stringify(m.broadcastOverride, null, 2) : "",
+      // Oct 27 (Hy's ask): the override box always opens EMPTY — a stored
+      // override is never pre-filled, so an edit can't re-save a stale
+      // skeleton by accident. An empty box on save sends nothing.
+      broadcastJson: "",
+      unlockTime: false,
     });
     setMsg("");
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   };
   const cancelMatchEdit = () => {
     setEditingMatch(null);
-    setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "", status: "scheduled", broadcastJson: "" });
+    setForm({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", format: "", status: "scheduled", broadcastJson: "", unlockTime: false });
   };
+
+  // Oct 28: cross-tab jump from a Series-tab match row's Edit button —
+  // open that match's edit form here, then clear the request so coming
+  // back to this tab later does not reopen it.
+  useEffect(() => {
+    if (!editMatchRequest) return;
+    if (editMatchRequest.match?.id) startMatchEdit(editMatchRequest.match);
+    if (onEditMatchRequestHandled) onEditMatchRequestHandled();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMatchRequest]);
 
   const load = useCallback(async () => {
     const [{ ok, data }, sRes] = await Promise.all([
@@ -570,7 +623,7 @@ function MatchesTab({ call, refresh }) {
     const { ok, data } = await call("/api/admin/sync", { method: "POST" });
     setSyncing(false);
     if (ok) {
-      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series${data.skippedBlacklisted ? `, ${data.skippedBlacklisted} blacklisted skipped` : ""}. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
+      setMsg(`Sync done — ${data.added} new, ${data.updated} updated, ${data.skipped} skipped (${data.total} fetched). Pruned ${data.prunedMatches || 0} old matches, ${data.autoFinished || 0} marked finished, ${data.prunedSeries || 0} empty series${data.skippedBlacklisted ? `, ${data.skippedBlacklisted} blacklisted skipped` : ""}${data.skippedMatchBlacklisted ? `, ${data.skippedMatchBlacklisted} deleted-match skipped` : ""}. Series in DB: ${data.seriesTotal}. Top: ${(data.breakdown || []).join(" · ")}. New matches are UNVERIFIED: add broadcast info in the Series tab, then Verify.`);
       load();
     } else {
       setMsg(data.error || "Sync failed.");
@@ -620,15 +673,32 @@ function MatchesTab({ call, refresh }) {
       ...(form.format ? { format: form.format } : {}),
       // Status editable ONLY in Edit mode — manual restore path when sync wrongly finishes a match (e.g. a Test between days). New-match creation keeps the server default.
       ...(editingMatch && form.status ? { status: form.status } : {}),
-      // Only send on edit (or when filled on create): emptying the field on
-      // edit clears a stale override back to series inheritance.
-      ...(editingMatch || broadcastOverride ? { broadcastOverride: broadcastOverride || {} } : {}),
+      // v66: the Edit form's unlock checkbox — the only way a locked
+      // start time opens up to sync again.
+      ...(editingMatch && form.unlockTime ? { startTimeLocked: false } : {}),
+      // Oct 27 (Hy's ask): send an override ONLY when the box is filled.
+      // Empty box = whatever is stored stays untouched, so series
+      // inheritance and existing per-match overrides both survive an
+      // innocent edit; pasting {} is the explicit way to clear one.
+      ...(form.broadcastJson && form.broadcastJson.trim() ? { broadcastOverride } : {}),
     };
+    const oldMatch = editingMatch ? matches.find((x) => x.id === editingMatch) : null;
+    const timeChanged =
+      !!oldMatch && !!form.startTime &&
+      new Date(form.startTime).getTime() !== new Date(oldMatch.startTime).getTime();
     const { ok, data } = editingMatch
       ? await call(`/api/admin/matches/${editingMatch}`, { method: "PUT", body: JSON.stringify(body) })
       : await call("/api/admin/matches", { method: "POST", body: JSON.stringify(body) });
     if (ok) {
-      setMsg(editingMatch ? "Match updated." : "Match created.");
+      setMsg(
+        editingMatch && form.unlockTime
+          ? "Match updated — start time unlocked (sync can change it again)."
+          : editingMatch && timeChanged
+            ? "Match updated — start time locked (sync won't change it)."
+            : editingMatch
+              ? "Match updated."
+              : "Match created."
+      );
       cancelMatchEdit();
       load();
     } else setMsg(data.error || (editingMatch ? "Update failed." : "Create failed."));
@@ -663,6 +733,11 @@ function MatchesTab({ call, refresh }) {
           {m.recheckAt && (
             <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-amber-700 dark:bg-amber-950 dark:text-amber-400" title={m.recheckNote || "Flagged for recheck"}>
               🔁 {fmtDay(m.recheckAt)}
+            </span>
+          )}
+          {m.startTimeLocked && (
+            <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-extrabold text-sky-700 dark:bg-sky-950 dark:text-sky-400" title="Start time was corrected by hand — sync will not change it">
+              🔒 TIME LOCKED
             </span>
           )}
         </p>
@@ -739,7 +814,21 @@ function MatchesTab({ call, refresh }) {
         <input className={inputCls} placeholder="Teams, comma separated (e.g. India, Australia)" value={form.teams} onChange={(e) => setForm({ ...form, teams: e.target.value })} required />
         <input className={inputCls} placeholder="Short names, comma separated (e.g. IND, AUS) — optional" value={form.shortNames} onChange={(e) => setForm({ ...form, shortNames: e.target.value })} />
         <input className={inputCls} placeholder="Match label (e.g. 2nd Test, 3rd ODI) — optional" value={form.matchNumber} onChange={(e) => setForm({ ...form, matchNumber: e.target.value })} />
+        <input className={inputCls} placeholder="Format (Test / ODI / T20I) — optional" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} />
         <input className={inputCls} type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} required />
+        {editingMatch && matches.find((x) => x.id === editingMatch)?.startTimeLocked ? (
+          <div className="rounded-lg bg-sky-50 p-3 text-xs font-bold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+            🔒 This start time was corrected by hand — sync will not change it.
+            <label className="mt-2 flex cursor-pointer items-center gap-2">
+              <input type="checkbox" checked={!!form.unlockTime} onChange={(e) => setForm({ ...form, unlockTime: e.target.checked })} />
+              Unlock — let sync update this time again
+            </label>
+          </div>
+        ) : editingMatch ? (
+          <p className="-mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            If you change the start time, it locks — sync will not overwrite your correction.
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <input className={inputCls} placeholder="Venue" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
           <input className={inputCls} placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
@@ -756,7 +845,7 @@ function MatchesTab({ call, refresh }) {
         )}
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-500 dark:text-slate-400">
-            Broadcast override JSON — optional, per-match only (wins over the series broadcast; leave empty to inherit the series)
+            Broadcast override JSON — optional, per-match only (leave empty to keep as-is; paste JSON to set this match's own broadcast; paste {"{}"} to remove it and inherit the series)
           </label>
           <textarea
             className={inputCls}
@@ -869,6 +958,222 @@ function RecheckTab({ call, refresh, onEditSeries }) {
 // HOME NOTE editor (v61): the amber strip on the public home page. The text
 // lives server-side (SyncMeta via /api/admin/settings), so changing or
 // clearing it needs no rebuild. Empty = strip hidden.
+// NEWS DESK (database phase, Oct 27) — Hy's working desk for news
+// posts: drafts wait here, Hy can make a post LIVE, move it back to
+// draft, EDIT it, or DELETE it. Live/Delete power stays with Hy
+// alone; writers (hand or agent) only ever create drafts.
+const NEWS_CATEGORIES = ["Injury", "Fitness", "Squad", "Match", "Broadcast", "Update"];
+
+function blankNewsForm() {
+  return {
+    title: "", slug: "", dek: "", dekExtra: "", tag: "", topic: "",
+    category: "Update", top: false, status: "draft", publishedAt: "",
+    imageSrc: "", imageAlt: "", imageCaption: "", imageCredit: "",
+    imageCreditUrl: "", imageLicense: "", imagePosition: "",
+    body: "", relatedLabel: "", relatedHref: "", sourcesText: "",
+  };
+}
+
+function postToForm(p) {
+  const f = blankNewsForm();
+  f.title = p.title || ""; f.slug = p.slug || ""; f.dek = p.dek || "";
+  f.dekExtra = p.dekExtra || ""; f.tag = p.tag || ""; f.topic = p.topic || "";
+  f.category = p.category || "Update"; f.top = !!p.top;
+  f.status = p.status || "draft";
+  f.publishedAt = p.publishedAt ? new Date(p.publishedAt).toISOString().slice(0, 16) : "";
+  if (p.image) {
+    f.imageSrc = p.image.src || ""; f.imageAlt = p.image.alt || "";
+    f.imageCaption = p.image.caption || ""; f.imageCredit = p.image.credit || "";
+    f.imageCreditUrl = p.image.creditUrl || ""; f.imageLicense = p.image.license || "";
+    f.imagePosition = p.image.position || "";
+  }
+  f.body = (p.body || []).join("\n\n");
+  if (p.related) { f.relatedLabel = p.related.label || ""; f.relatedHref = p.related.href || ""; }
+  f.sourcesText = (p.sources || []).map((s) => `${s.name} | ${s.url}`).join("\n");
+  return f;
+}
+
+function formToPayload(f) {
+  return {
+    title: f.title.trim(),
+    slug: f.slug.trim() || undefined,
+    dek: f.dek, dekExtra: f.dekExtra, tag: f.tag, topic: f.topic,
+    category: f.category, top: !!f.top, status: f.status,
+    publishedAt: f.publishedAt ? new Date(f.publishedAt).toISOString() : undefined,
+    image: f.imageSrc.trim()
+      ? { src: f.imageSrc.trim(), alt: f.imageAlt, caption: f.imageCaption, credit: f.imageCredit, creditUrl: f.imageCreditUrl, license: f.imageLicense, position: f.imagePosition || undefined }
+      : null,
+    body: f.body,
+    related: f.relatedHref.trim() ? { label: f.relatedLabel, href: f.relatedHref.trim() } : null,
+    sources: f.sourcesText.split("\n").map((line) => {
+      const [name, ...rest] = line.split("|");
+      return { name: (name || "").trim(), url: rest.join("|").trim() };
+    }).filter((s) => s.url),
+  };
+}
+
+function NewsDeskTab({ call, refresh }) {
+  const [posts, setPosts] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [editingId, setEditingId] = useState(null); // post id, "new", or null
+  const [form, setForm] = useState(blankNewsForm());
+
+  const load = useCallback(async () => {
+    const { ok, data } = await call("/api/admin/news");
+    if (ok) { setPosts(data.posts || []); setError(""); }
+    else setError(data.error || "Could not load news posts.");
+  }, [call]);
+
+  useEffect(() => { load(); }, [load, refresh]);
+
+  const act = async (label, fn) => {
+    setBusy(label);
+    const res = await fn();
+    setBusy("");
+    if (!res.ok) { setError(res.data.error || "Something went wrong."); return false; }
+    setError("");
+    await load();
+    return true;
+  };
+
+  const setStatus = (p, status) =>
+    act(`status-${p.id}`, () => call(`/api/admin/news/${p.id}`, { method: "PUT", body: JSON.stringify({ status }) }));
+
+  const remove = (p) => {
+    if (!window.confirm(`Delete this post for good?\n\n"${p.title}"`)) return;
+    act(`del-${p.id}`, () => call(`/api/admin/news/${p.id}`, { method: "DELETE" }));
+  };
+
+  const seed = () =>
+    act("seed", () => call("/api/admin/news/seed", { method: "POST", body: "{}" }));
+
+  const openEdit = (p) => { setEditingId(p ? p.id : "new"); setForm(p ? postToForm(p) : blankNewsForm()); };
+
+  const save = async () => {
+    if (!form.title.trim()) { setError("A headline is required."); return; }
+    const payload = JSON.stringify(formToPayload(form));
+    const done = await act("save", () =>
+      editingId === "new"
+        ? call("/api/admin/news", { method: "POST", body: payload })
+        : call(`/api/admin/news/${editingId}`, { method: "PUT", body: payload })
+    );
+    if (done) setEditingId(null);
+  };
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+
+  const renderRow = (p) => (
+    <div key={p.id} className="flex items-start justify-between gap-3 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">{p.title}</p>
+        <p className="mt-0.5 text-xs text-slate-400">
+          {p.tag || "—"} · {p.category} · {new Date(p.publishedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}
+          {p.top ? " · ★ Top" : ""}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+        {p.status === "draft" ? (
+          <button onClick={() => setStatus(p, "live")} disabled={busy} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Make Live</button>
+        ) : (
+          <>
+            <a href={`/news/${p.slug}`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50 dark:border-slate-700 dark:text-sky-300 dark:hover:bg-slate-800">View</a>
+            <button onClick={() => setStatus(p, "draft")} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">To Draft</button>
+          </>
+        )}
+        <button onClick={() => openEdit(p)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Edit</button>
+        <button onClick={() => remove(p)} disabled={busy} className={dangerCls}>Delete</button>
+      </div>
+    </div>
+  );
+
+  const drafts = (posts || []).filter((p) => p.status === "draft");
+  const live = (posts || []).filter((p) => p.status === "live");
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-base font-extrabold dark:text-white">News Desk</h2>
+        <button onClick={() => openEdit(null)} className={btnCls}>+ New draft</button>
+      </div>
+      {error && <p className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 dark:bg-rose-950 dark:text-rose-300">{error}</p>}
+      {posts === null ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : posts.length === 0 && editingId === null ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-center dark:border-slate-700">
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No news posts in the database yet.</p>
+          <button onClick={seed} disabled={busy} className={`${btnCls} mt-3`}>Load the 5 starter posts</button>
+        </div>
+      ) : (
+        <>
+          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-widest text-slate-400">Drafts ({drafts.length})</h3>
+          <div className="mb-5 divide-y divide-slate-100 rounded-2xl border border-slate-100 bg-white shadow-card dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+            {drafts.length === 0 ? <p className="px-4 py-3 text-sm text-slate-400">No drafts waiting.</p> : drafts.map(renderRow)}
+          </div>
+          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-widest text-slate-400">Live ({live.length})</h3>
+          <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100 bg-white shadow-card dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+            {live.length === 0 ? <p className="px-4 py-3 text-sm text-slate-400">Nothing live yet.</p> : live.map(renderRow)}
+          </div>
+        </>
+      )}
+
+      {editingId !== null && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-card dark:border-slate-700 dark:bg-slate-900">
+          <h3 className="mb-3 text-sm font-extrabold dark:text-white">{editingId === "new" ? "New draft" : "Edit post"}</h3>
+          <div className="flex flex-col gap-3">
+            <input className={inputCls} placeholder="Headline" value={form.title} onChange={set("title")} />
+            <input className={inputCls} placeholder="URL slug (blank = from headline)" value={form.slug} onChange={set("slug")} />
+            <textarea className={inputCls} rows={2} placeholder="Summary (dek) — the two lines under the headline" value={form.dek} onChange={set("dek")} />
+            <input className={inputCls} placeholder="Extra detail line (featured card only, optional)" value={form.dekExtra} onChange={set("dekExtra")} />
+            <div className="grid grid-cols-2 gap-3">
+              <input className={inputCls} placeholder="Series line (tag) — e.g. India tour of New Zealand, 2026" value={form.tag} onChange={set("tag")} />
+              <input className={inputCls} placeholder="Topic (IPL, World Cup…) — optional" value={form.topic} onChange={set("topic")} />
+            </div>
+            <div className="grid grid-cols-3 items-center gap-3">
+              <select className={inputCls} value={form.category} onChange={set("category")}>
+                {NEWS_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select className={inputCls} value={form.status} onChange={set("status")}>
+                <option value="draft">Draft</option>
+                <option value="live">Live</option>
+              </select>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                <input type="checkbox" checked={form.top} onChange={set("top")} /> ★ Top story
+              </label>
+            </div>
+            <input className={inputCls} type="datetime-local" value={form.publishedAt} onChange={set("publishedAt")} />
+            <textarea className={inputCls} rows={10} placeholder={"Full story — one paragraph per block, blank line between paragraphs"} value={form.body} onChange={set("body")} />
+            <textarea className={inputCls} rows={3} placeholder={"Sources — one per line: Name | https://…"} value={form.sourcesText} onChange={set("sourcesText")} />
+            <div className="grid grid-cols-2 gap-3">
+              <input className={inputCls} placeholder="Where-to-watch box label (optional)" value={form.relatedLabel} onChange={set("relatedLabel")} />
+              <input className={inputCls} placeholder="Where-to-watch link — e.g. /series/… (optional)" value={form.relatedHref} onChange={set("relatedHref")} />
+            </div>
+            <details>
+              <summary className="cursor-pointer text-xs font-bold text-slate-400">Photo (free-licence only)</summary>
+              <div className="mt-2 flex flex-col gap-2">
+                <input className={inputCls} placeholder="Image path — e.g. /news/photo.jpg" value={form.imageSrc} onChange={set("imageSrc")} />
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={inputCls} placeholder="Alt text" value={form.imageAlt} onChange={set("imageAlt")} />
+                  <input className={inputCls} placeholder="Caption" value={form.imageCaption} onChange={set("imageCaption")} />
+                  <input className={inputCls} placeholder="Credit — e.g. Name / Wikimedia Commons" value={form.imageCredit} onChange={set("imageCredit")} />
+                  <input className={inputCls} placeholder="Credit link" value={form.imageCreditUrl} onChange={set("imageCreditUrl")} />
+                  <input className={inputCls} placeholder="Licence — e.g. CC BY-SA 4.0" value={form.imageLicense} onChange={set("imageLicense")} />
+                  <input className={inputCls} placeholder="Position — e.g. 50% 30% (optional)" value={form.imagePosition} onChange={set("imagePosition")} />
+                </div>
+              </div>
+            </details>
+            <div className="flex gap-2">
+              <button onClick={save} disabled={busy} className={btnCls}>Save</button>
+              <button onClick={() => setEditingId(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function HomeNoteEditor({ call }) {
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
@@ -927,6 +1232,7 @@ export default function AdminPage() {
   const [refresh, setRefresh] = useState(0);
   const [recheckDue, setRecheckDue] = useState(0);
   const [editSeriesRequest, setEditSeriesRequest] = useState(null);
+  const [editMatchRequest, setEditMatchRequest] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -974,7 +1280,7 @@ export default function AdminPage() {
       </div>
       <HomeNoteEditor call={call} />
       <div className="mb-4 flex gap-2">
-        {(["matches", "series", "recheck"]).map((t) => (
+        {(["matches", "series", "recheck", "news"]).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setRefresh((r) => r + 1); }}
@@ -990,10 +1296,22 @@ export default function AdminPage() {
         ))}
       </div>
       {tab === "matches"
-        ? <MatchesTab call={call} refresh={refresh} />
+        ? <MatchesTab call={call} refresh={refresh} editMatchRequest={editMatchRequest} onEditMatchRequestHandled={() => setEditMatchRequest(null)} />
         : tab === "series"
-          ? <SeriesTab call={call} refresh={refresh} editSeriesRequest={editSeriesRequest} />
-          : <RecheckTab
+          ? <SeriesTab
+              call={call}
+              refresh={refresh}
+              editSeriesRequest={editSeriesRequest}
+              onEditMatch={(m) => {
+                if (!m?.id) return;
+                setEditMatchRequest({ match: m, nonce: Date.now() });
+                setTab("matches");
+                setRefresh((r) => r + 1);
+              }}
+            />
+          : tab === "news"
+            ? <NewsDeskTab call={call} refresh={refresh} />
+            : <RecheckTab
               call={call}
               refresh={refresh}
               onEditSeries={(seriesId) => {

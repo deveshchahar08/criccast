@@ -15,6 +15,7 @@ export default async function sitemap() {
 
   return [
     { url: base, lastModified: now, changeFrequency: "hourly", priority: 1 },
+    { url: `${base}/live`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${base}/fixtures`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${base}/dth-codes`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${base}/series`, lastModified: now, changeFrequency: "daily", priority: 0.7 },
@@ -30,5 +31,9 @@ export default async function sitemap() {
       changeFrequency: "daily",
       priority: 0.7,
     })),
+    { url: `${base}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
+    { url: `${base}/contact`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
+    { url: `${base}/privacy-policy`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
+    { url: `${base}/disclaimer`, lastModified: now, changeFrequency: "monthly", priority: 0.3 },
   ];
 }

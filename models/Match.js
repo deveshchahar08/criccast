@@ -37,6 +37,20 @@ const matchSchema = new Schema(
     // (see the series recheck route) so the bell can ring again.
     recheckAlertedAt: { type: Date, default: null },
     unverifiedAlertedAt: { type: Date, default: null },
+    // v65: the last time a sync actually carried this match in the API
+    // feed. effectiveStatus trusts a started match as live while it
+    // keeps being seen (rain marathons, reserve days) — matches the API
+    // silently dropped expire by their format ceiling instead.
+    lastSeenAt: { type: Date, default: null },
+    // v66: Hy hand-corrected this startTime in admin because the feed
+    // keeps sending a wrong one (Oct 23: the UAE Tri-Series Final sat
+    // at 5:30 PM while the real start was 5:00 PM, and every sync
+    // stomped the fix back). runSync must never overwrite a locked
+    // startTime. The lock is set by the admin match update whenever
+    // the submitted startTime differs from the stored one, and on
+    // admin-created matches; it is cleared only by an explicit unlock
+    // from the match Edit form.
+    startTimeLocked: { type: Boolean, default: false },
     // Admin "New" box: a match counts as new for 3 days after it appears
     // (createdAt) unless Hy skips it — this stamps when he did.
     dismissedNewAt: { type: Date, default: null },

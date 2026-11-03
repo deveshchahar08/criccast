@@ -29,6 +29,29 @@
   scrollbar-width: none;
 }
 
+/* Thin, subtle scrollbar for the Latest News rails — visible enough to
+   say "this list scrolls", quiet enough to not fight the design. */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(186 205 226 / 0.8) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(186 205 226 / 0.8);
+  border-radius: 999px;
+}
+.dark .thin-scrollbar {
+  scrollbar-color: rgb(71 85 105 / 0.9) transparent;
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105 / 0.9);
+}
+
 /* Text cursor (caret) visible in both modes — brand blue.
    Without this, OS dark mode renders a white caret even on light inputs. */
 input,

@@ -5,6 +5,13 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   {
+    href: "/news",
+    label: "News",
+    icon: (
+      <path d="M4 22h15a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-4 0V9M10 6h7v4h-7zM10 14h7M10 18h4" strokeLinecap="round" strokeLinejoin="round" />
+    ),
+  },
+  {
     href: "/",
     label: "Home",
     icon: (
@@ -38,7 +45,7 @@ export default function BottomNav() {
   const pathname = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white md:hidden dark:border-slate-800 dark:bg-slate-950">
-      <div className="grid grid-cols-4">
+      <div className="grid grid-cols-5">
         {ITEMS.map((item) => {
           // Same rule as the desktop NavLinks: section pages (e.g.
           // /series/<slug>) keep their tab highlighted.
