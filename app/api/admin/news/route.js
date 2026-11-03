@@ -15,7 +15,7 @@ export async function GET(request) {
     return NextResponse.json({ error: 'No database connected.' }, { status: 503 });
   await dbConnect();
   const docs = await NewsPost.find({}).sort({ publishedAt: -1 }).lean();
-  const posts = docs.map((d) => ({ ...d, id: String(d._id) }));
+  const posts = docs.map((d) => ({ ...d, id: String(d._id), views: d.views || 0 }));
   // Drafts first (they are waiting on Hy), then live, newest first in each.
   posts.sort((a, b) => {
     if (a.status !== b.status) return a.status === 'draft' ? -1 : 1;

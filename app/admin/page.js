@@ -1027,6 +1027,14 @@ function NewsDeskTab({ call, refresh }) {
 
   useEffect(() => { load(); }, [load, refresh]);
 
+  const formRef = useRef(null);
+  // The edit form renders BELOW the full post list, so without this
+  // an Edit click looks like nothing happened. Bring the form into
+  // view whenever it opens.
+  useEffect(() => {
+    if (editingId !== null) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [editingId]);
+
   const act = async (label, fn) => {
     setBusy(label);
     const res = await fn();
@@ -1069,7 +1077,7 @@ function NewsDeskTab({ call, refresh }) {
         <p className="text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">{p.title}</p>
         <p className="mt-0.5 text-xs text-slate-400">
           {p.tag || "—"} · {p.category} · {new Date(p.publishedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}
-          {p.top ? " · ★ Top" : ""}
+          {p.top ? " · ★ Top" : ""} · 👁 {p.views || 0}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
@@ -1118,8 +1126,8 @@ function NewsDeskTab({ call, refresh }) {
       )}
 
       {editingId !== null && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-card dark:border-slate-700 dark:bg-slate-900">
-          <h3 className="mb-3 text-sm font-extrabold dark:text-white">{editingId === "new" ? "New draft" : "Edit post"}</h3>
+        <div ref={formRef} className="mt-5 scroll-mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-card dark:border-slate-700 dark:bg-slate-900">
+          <h3 className="mb-3 text-sm font-extrabold dark:text-white">{editingId === "new" ? "New draft" : `Edit post: ${(posts || []).find((p) => p.id === editingId)?.title || form.title}`}</h3>
           <div className="flex flex-col gap-3">
             <input className={inputCls} placeholder="Headline" value={form.title} onChange={set("title")} />
             <input className={inputCls} placeholder="URL slug (blank = from headline)" value={form.slug} onChange={set("slug")} />
@@ -1149,7 +1157,7 @@ function NewsDeskTab({ call, refresh }) {
               <input className={inputCls} placeholder="Where-to-watch link — e.g. /series/… (optional)" value={form.relatedHref} onChange={set("relatedHref")} />
             </div>
             <details>
-              <summary className="cursor-pointer text-xs font-bold text-slate-400">Photo (free-licence only)</summary>
+              <summary className="cursor-pointer text-xs font-bold text-slate-400">Photo</summary>
               <div className="mt-2 flex flex-col gap-2">
                 <input className={inputCls} placeholder="Image path — e.g. /news/photo.jpg" value={form.imageSrc} onChange={set("imageSrc")} />
                 <div className="grid grid-cols-2 gap-2">

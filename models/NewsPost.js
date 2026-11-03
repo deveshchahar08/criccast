@@ -48,6 +48,7 @@ const newsPostSchema = new Schema(
     top: { type: Boolean, default: false }, // editor's pick → Top Stories box
     status: { type: String, enum: ['draft', 'live'], default: 'draft', index: true },
     publishedAt: { type: Date, default: Date.now },
+    views: { type: Number, default: 0 }, // public post-page reads; shown per post in the News Desk
     image: { type: imageSchema, default: null },
     body: [{ type: String }], // paragraphs, in order
     related: { type: relatedSchema, default: null }, // "where to watch" box at the end
