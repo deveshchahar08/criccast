@@ -88,6 +88,9 @@ export default async function NewsPostPage({ params }) {
               >
                 {formatDateIST(post.publishedAt)} · {timeAgo(post.publishedAt)}
               </time>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                👁 {post.views || 0} views
+              </span>
             </div>
             <h1 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-navy md:text-3xl dark:text-white">
               {post.title}
@@ -112,6 +115,9 @@ export default async function NewsPostPage({ params }) {
               >
                 {formatDateIST(post.publishedAt)} · {timeAgo(post.publishedAt)}
               </time>
+              <span className="text-xs font-medium text-slate-300">
+                👁 {post.views || 0} views
+              </span>
             </div>
             <h1 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">
               {post.title}

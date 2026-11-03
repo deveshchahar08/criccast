@@ -54,6 +54,7 @@ export default function NewsRow({ post }) {
             {post.tag}
           </span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
+          <span>👁 {post.views || 0}</span>
         </p>
         <h3 className="mt-1 line-clamp-3 text-[15px] font-extrabold leading-snug tracking-tight text-navy dark:text-white">
           {post.title}
@@ -89,6 +90,7 @@ export function NewsCard({ post }) {
               {post.tag}
             </span>
             <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
+            <span>👁 {post.views || 0}</span>
           </p>
           <h3 className="mt-1 line-clamp-3 text-sm font-extrabold leading-snug tracking-tight text-navy dark:text-white">
             {post.title}
@@ -124,12 +126,17 @@ export function NewsFeatured({ post }) {
             <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold tracking-wide text-sky-700 shadow-sm dark:bg-sky-950 dark:text-sky-300 dark:shadow-none">
               {post.tag}
             </span>
-            <time
-              dateTime={post.publishedAt}
-              className="shrink-0 text-xs font-medium text-slate-400 dark:text-slate-500"
-            >
-              {timeAgo(post.publishedAt)}
-            </time>
+            <span className="flex shrink-0 items-center gap-2">
+              <time
+                dateTime={post.publishedAt}
+                className="text-xs font-medium text-slate-400 dark:text-slate-500"
+              >
+                {timeAgo(post.publishedAt)}
+              </time>
+              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                👁 {post.views || 0}
+              </span>
+            </span>
           </div>
           <h3 className="mt-2.5 text-xl font-extrabold leading-snug tracking-tight text-navy md:text-2xl dark:text-white">
             {post.title}
@@ -225,6 +232,9 @@ export function NewsSpotlight({ post }) {
             >
               {timeAgo(post.publishedAt)}
             </time>
+            <span className="text-xs font-medium text-white/70">
+              👁 {post.views || 0}
+            </span>
           </div>
           <h2 className="mt-3 max-w-3xl text-2xl font-extrabold leading-tight tracking-tight text-white md:text-4xl">
             {post.title}
@@ -277,6 +287,7 @@ export function NewsRailItem({ post }) {
             {post.tag}
           </span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
+          <span>👁 {post.views || 0}</span>
         </p>
       </div>
     </Link>

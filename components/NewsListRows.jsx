@@ -33,6 +33,8 @@ function NewsListRow({ post }) {
           </span>
           <span aria-hidden>•</span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
+          <span aria-hidden>•</span>
+          <span>👁 {post.views || 0}</span>
         </p>
       </div>
     </Link>
