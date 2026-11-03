@@ -18,11 +18,17 @@
 //    as null. slug, status and the ids are NOT in the whitelist and
 //    can never change through this door.
 //  - POST {"action":"delete"} removes the post for good.
+//  - POST {"action":"upload", "data":<base64>, "filename":…,
+//    "contentType":…, "image":{credit…}} stores the photo bytes in
+//    Vercel Blob and REPLACES the post's photo with the stored URL
+//    (same validation as update's image: credit is mandatory, alt
+//    falls back to the post title).
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { checkAgentToken } from '@/lib/agentAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
+import { PHOTO_MAX_BYTES, PHOTO_TYPES, photoStorageReady, storeNewsPhoto } from '@/lib/photoStore';
 
 function noDb() {
   return NextResponse.json(
@@ -123,6 +129,7 @@ const UPDATE_FIELDS = [
 
 // POST /api/agent/news/<id>  {"action":"publish"} | {"action":"image", "image":{…}}
 //   | {"action":"update", "fields":{…}} | {"action":"delete"}
+//   | {"action":"upload", "data":<base64>, "filename":…, "contentType":…, "image":{…}}
 export async function POST(request, { params }) {
   const blocked = guard(request);
   if (blocked) return blocked;
@@ -135,9 +142,9 @@ export async function POST(request, { params }) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
   const action = body?.action;
-  if (action !== 'publish' && action !== 'image' && action !== 'update' && action !== 'delete')
+  if (action !== 'publish' && action !== 'image' && action !== 'update' && action !== 'delete' && action !== 'upload')
     return NextResponse.json(
-      { error: 'Unsupported action. This door accepts {"action":"publish"}, {"action":"image"}, {"action":"update"} and {"action":"delete"}.' },
+      { error: 'Unsupported action. This door accepts {"action":"publish"}, {"action":"image"}, {"action":"update"}, {"action":"delete"} and {"action":"upload"}.' },
       { status: 400 }
     );
   // The param is normally the post's ObjectId — but a live post's id
@@ -157,6 +164,7 @@ export async function POST(request, { params }) {
   }
   if (action === 'delete') return deletePost(doc);
   if (action === 'update') return updatePost(doc, body);
+  if (action === 'upload') return uploadPhoto(doc, body);
   // action === 'image' — fill an EMPTY image only, touch nothing else.
   const image = pickDoorImage(body?.image, doc.title);
   if (!image)
@@ -270,4 +278,74 @@ async function updatePost(doc, body) {
     slug: doc.slug,
     post: { ...doc.toObject(), id: String(doc._id) },
   });
+}
+
+// POST {"action":"upload", "data":<base64>, "filename":…,
+// "contentType":…, "image":{credit…}} — the photo bytes arrive in
+// the body (this door speaks JSON only), are stored in Vercel Blob,
+// and the stored URL REPLACES the post's photo with exactly the
+// update action's image semantics (pickReplaceImage: credit is
+// mandatory, alt falls back to the post title).
+async function uploadPhoto(doc, body) {
+  if (!photoStorageReady())
+    return NextResponse.json(
+      { error: 'Photo storage is not set up yet. Add a Vercel Blob store to enable uploads.' },
+      { status: 503 }
+    );
+  const contentType = str(body?.contentType);
+  if (!PHOTO_TYPES[contentType])
+    return NextResponse.json(
+      { error: 'A valid "contentType" is required: image/jpeg, image/png, image/webp or image/gif.' },
+      { status: 400 }
+    );
+  let data = typeof body?.data === 'string' ? body.data.replace(/\s+/g, '') : '';
+  if (data.startsWith('data:')) data = data.split(',', 2)[1] || ''; // tolerate a data: URL
+  if (!data)
+    return NextResponse.json(
+      { error: 'The image "data" (base64) is missing.' },
+      { status: 400 }
+    );
+  // Base64 inflates bytes by ~4/3 — reject an oversize body before
+  // decoding it, then check the real byte count as well.
+  if (data.length > Math.ceil(PHOTO_MAX_BYTES / 3) * 4 + 4)
+    return NextResponse.json(
+      { error: 'That photo is over the 8 MB upload limit.' },
+      { status: 400 }
+    );
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length === 0)
+    return NextResponse.json(
+      { error: 'The image "data" did not decode to any bytes.' },
+      { status: 400 }
+    );
+  if (bytes.length > PHOTO_MAX_BYTES)
+    return NextResponse.json(
+      { error: 'That photo is over the 8 MB upload limit.' },
+      { status: 400 }
+    );
+  // Credit is mandatory — check BEFORE uploading so a bad request
+  // never leaves an orphan file sitting in storage.
+  if (!str(body?.image?.credit))
+    return NextResponse.json(
+      { error: 'A valid image is required: a non-empty "credit" (alt falls back to the post title).' },
+      { status: 400 }
+    );
+  let stored;
+  try {
+    stored = await storeNewsPhoto(bytes, str(body?.filename) || 'photo', contentType);
+  } catch {
+    return NextResponse.json(
+      { error: 'The photo upload failed. Please try again.' },
+      { status: 502 }
+    );
+  }
+  const image = pickReplaceImage({ ...(body?.image || {}), src: stored.url }, doc.title);
+  if (!image)
+    return NextResponse.json(
+      { error: 'A valid image is required: a non-empty "credit" (alt falls back to the post title).' },
+      { status: 400 }
+    );
+  doc.image = image;
+  await doc.save();
+  return NextResponse.json({ ok: true, id: String(doc._id), slug: doc.slug, image });
 }

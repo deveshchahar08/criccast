@@ -22,10 +22,15 @@ function useAdminApi() {
 
   const call = useCallback(
     async (path, opts = {}) => {
+      // FormData bodies (the News Desk photo upload) must go out
+      // without the JSON content type — the browser sets the
+      // multipart one, boundary included. Every other call is JSON,
+      // exactly as before.
+      const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
       const res = await fetch(path, {
         ...opts,
         headers: {
-          "Content-Type": "application/json",
+          ...(isForm ? {} : { "Content-Type": "application/json" }),
           "x-admin-token": token,
           ...(opts.headers || {}),
         },
@@ -1018,6 +1023,10 @@ function NewsDeskTab({ call, refresh }) {
   const [busy, setBusy] = useState("");
   const [editingId, setEditingId] = useState(null); // post id, "new", or null
   const [form, setForm] = useState(blankNewsForm());
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState("");
+  const [uploadError, setUploadError] = useState(false);
+  const photoFileRef = useRef(null);
 
   const load = useCallback(async () => {
     const { ok, data } = await call("/api/admin/news");
@@ -1056,7 +1065,30 @@ function NewsDeskTab({ call, refresh }) {
   const seed = () =>
     act("seed", () => call("/api/admin/news/seed", { method: "POST", body: "{}" }));
 
-  const openEdit = (p) => { setEditingId(p ? p.id : "new"); setForm(p ? postToForm(p) : blankNewsForm()); };
+  const openEdit = (p) => { setEditingId(p ? p.id : "new"); setForm(p ? postToForm(p) : blankNewsForm()); setUploadMsg(""); setUploadError(false); };
+
+  // Photo upload: the file goes to the admin upload endpoint, which
+  // stores it and hands back a hosted URL. That URL lands in the
+  // form's Image field, so the normal Save attaches it to the post.
+  const uploadPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again after an error
+    if (!file) return;
+    setUploading(true);
+    setUploadError(false);
+    setUploadMsg("Uploading photo…");
+    const fd = new FormData();
+    fd.append("file", file);
+    const { ok, data } = await call("/api/admin/news/upload", { method: "POST", body: fd });
+    setUploading(false);
+    if (ok && data.url) {
+      setForm((f) => ({ ...f, imageSrc: data.url }));
+      setUploadMsg("Photo uploaded — press Save to attach it to this post.");
+    } else {
+      setUploadError(true);
+      setUploadMsg(data.error || "The upload failed. Please try again.");
+    }
+  };
 
   const save = async () => {
     if (!form.title.trim()) { setError("A headline is required."); return; }
@@ -1159,7 +1191,16 @@ function NewsDeskTab({ call, refresh }) {
             <details>
               <summary className="cursor-pointer text-xs font-bold text-slate-400">Photo</summary>
               <div className="mt-2 flex flex-col gap-2">
-                <input className={inputCls} placeholder="Image path — e.g. /news/photo.jpg" value={form.imageSrc} onChange={set("imageSrc")} />
+                <input className={inputCls} placeholder="Image path / URL — paste a hosted link, or upload a photo file below" value={form.imageSrc} onChange={set("imageSrc")} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <input ref={photoFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={uploadPhoto} />
+                  <button type="button" onClick={() => photoFileRef.current?.click()} disabled={uploading} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                    {uploading ? "Uploading…" : "Upload a photo"}
+                  </button>
+                  {uploadMsg && (
+                    <span className={`text-xs font-semibold ${uploadError ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`}>{uploadMsg}</span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <input className={inputCls} placeholder="Alt text" value={form.imageAlt} onChange={set("imageAlt")} />
                   <input className={inputCls} placeholder="Caption" value={form.imageCaption} onChange={set("imageCaption")} />
