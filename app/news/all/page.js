@@ -7,7 +7,7 @@ import Link from "next/link";
 import { getLiveNewsPosts } from "@/lib/news";
 import NewsListRows from "@/components/NewsListRows";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 120;
 
 export const metadata = {
   title: "All Cricket News | CricCast",

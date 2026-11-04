@@ -4,12 +4,14 @@
 import { NextResponse } from "next/server";
 import { checkAdminToken } from "@/lib/adminAuth";
 import { runSync } from "@/lib/runSync";
+import { bustSiteCache } from "@/lib/bustCache";
 
 export async function POST(request) {
   const auth = checkAdminToken(request);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
   try {
     const data = await runSync();
+    bustSiteCache();
     return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json(

@@ -7,6 +7,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Series from '@/models/Series';
 import Match from '@/models/Match';
+import { bustSiteCache } from '@/lib/bustCache';
 
 const THREE_DAYS = 3 * 24 * 3600 * 1000;
 
@@ -35,5 +36,6 @@ export async function POST(request, { params }) {
     });
     flagged++;
   }
+  bustSiteCache();
   return NextResponse.json({ ok: true, flagged });
 }

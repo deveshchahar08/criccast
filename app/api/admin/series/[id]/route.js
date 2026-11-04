@@ -5,6 +5,7 @@ import { dbConnect, hasDb } from '@/lib/db';
 import Series from '@/models/Series';
 import Match from '@/models/Match';
 import SyncMeta from '@/models/SyncMeta';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function PUT(request, { params }) {
   const auth = checkAdminToken(request);
@@ -44,6 +45,7 @@ export async function PUT(request, { params }) {
       { $set: { verifiedAt: new Date() } }
     );
   }
+  bustSiteCache();
   return NextResponse.json({ series: updated });
 }
 
@@ -72,5 +74,6 @@ export async function DELETE(request, { params }) {
       { upsert: true }
     );
   }
+  bustSiteCache();
   return NextResponse.json({ ok: true });
 }

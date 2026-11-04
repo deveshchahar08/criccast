@@ -4,6 +4,7 @@
 // Same sync core as the admin "Sync Now" button (lib/runSync.js).
 import { NextResponse } from "next/server";
 import { runSync } from "@/lib/runSync";
+import { bustSiteCache } from "@/lib/bustCache";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export async function GET(request) {
   }
   try {
     const data = await runSync();
+    bustSiteCache();
     return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json(

@@ -7,6 +7,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Series from '@/models/Series';
 import Match from '@/models/Match';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function POST(request, { params }) {
   const auth = checkAdminToken(request);
@@ -26,5 +27,6 @@ export async function POST(request, { params }) {
     },
     { $set: { dismissedNewAt: new Date() } }
   );
+  bustSiteCache();
   return NextResponse.json({ ok: true, dismissedMatches: res.modifiedCount || 0 });
 }

@@ -7,6 +7,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
 import { pickNewsFields, slugify } from '@/lib/newsAdmin';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function GET(request) {
   const auth = checkAdminToken(request);
@@ -46,5 +47,6 @@ export async function POST(request) {
     status: fields.status === 'live' ? 'live' : 'draft',
     publishedAt: fields.publishedAt || new Date(),
   });
+  bustSiteCache();
   return NextResponse.json({ post: { ...doc.toObject(), id: String(doc._id) } }, { status: 201 });
 }

@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { PHOTO_MAX_BYTES, PHOTO_TYPES, photoStorageReady, storeNewsPhoto } from '@/lib/photoStore';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function POST(request) {
   const auth = checkAdminToken(request);
@@ -42,6 +43,7 @@ export async function POST(request) {
     );
   try {
     const { url, pathname } = await storeNewsPhoto(file, file.name, file.type);
+    bustSiteCache();
     return NextResponse.json({ ok: true, url, pathname });
   } catch {
     return NextResponse.json(

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import SyncMeta from '@/models/SyncMeta';
+import { bustSiteCache } from '@/lib/bustCache';
 
 const NOTE_KEY = 'homeNote';
 const MAX_LEN = 300;
@@ -37,5 +38,6 @@ export async function PUT(request) {
     { $set: { data: { text }, updatedAt: new Date() } },
     { upsert: true }
   );
+  bustSiteCache();
   return NextResponse.json({ ok: true, homeNote: text });
 }

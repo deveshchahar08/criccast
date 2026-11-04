@@ -4,6 +4,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
 import SyncMeta from '@/models/SyncMeta';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function PUT(request, { params }) {
   const auth = checkAdminToken(request);
@@ -63,6 +64,7 @@ export async function PUT(request, { params }) {
     runValidators: true,
   });
   if (!updated) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+  bustSiteCache();
   return NextResponse.json({ match: updated });
 }
 
@@ -87,5 +89,6 @@ export async function DELETE(request, { params }) {
       { upsert: true }
     );
   }
+  bustSiteCache();
   return NextResponse.json({ ok: true });
 }

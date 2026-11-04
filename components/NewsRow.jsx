@@ -4,6 +4,7 @@
 // the NewsPost record); posts without one get a navy brand block with a
 // newspaper glyph instead — never a lifted press photo.
 import Link from "next/link";
+import NewsPhoto from "./NewsPhoto";
 import { timeAgo } from "@/lib/format";
 
 // View count — outline eye icon (stroke style, matching the site's
@@ -41,14 +42,14 @@ export function ViewsCount({
   );
 }
 
-export function NewsThumb({ post, className = "" }) {
+export function NewsThumb({ post, className = "", sizes }) {
   if (post.image) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <NewsPhoto
         src={post.image.src}
         alt={post.image.alt}
         loading="lazy"
+        sizes={sizes}
         style={{ objectPosition: post.image.position || "50% 30%" }}
         className={`${className} object-cover`}
       />
@@ -82,7 +83,7 @@ export default function NewsRow({ post }) {
       href={`/news/${post.slug}`}
       className="flex gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-card transition hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-sky-800"
     >
-      <NewsThumb post={post} className="h-20 w-24 shrink-0 rounded-xl" />
+      <NewsThumb post={post} className="h-20 w-24 shrink-0 rounded-xl" sizes="96px" />
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 text-[11px] font-bold text-slate-400 dark:text-slate-500">
           <span className="font-extrabold tracking-wide text-sky-700 dark:text-sky-300">
@@ -112,7 +113,11 @@ export function NewsCard({ post }) {
     <article className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900">
       <Link href={`/news/${post.slug}`} className="block">
         <div className="relative">
-          <NewsThumb post={post} className="aspect-[16/9] w-full" />
+          <NewsThumb
+            post={post}
+            className="aspect-[16/9] w-full"
+            sizes="(max-width: 768px) 100vw, 400px"
+          />
           {chipLabel && (
             <span className="absolute left-2.5 top-2.5 rounded-full bg-navy/85 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
               {chipLabel}
@@ -155,6 +160,7 @@ export function NewsFeatured({ post }) {
         <NewsThumb
           post={post}
           className="aspect-[16/9] w-full sm:aspect-auto sm:w-[42%] sm:shrink-0"
+          sizes="(max-width: 640px) 100vw, 480px"
         />
         <div className="flex flex-col bg-gradient-to-br from-sky-50 via-white to-white p-4 sm:w-[58%] md:p-6 dark:from-sky-950/40 dark:via-slate-900 dark:to-slate-900">
           <div className="flex items-center justify-between gap-2">
@@ -223,12 +229,14 @@ export function NewsSpotlight({ post }) {
         className="group relative block h-[400px] overflow-hidden rounded-2xl md:h-[460px]"
       >
         {post.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <NewsPhoto
             src={post.image.src}
             alt={post.image.alt}
+            loading="eager"
+            sizes="(max-width: 768px) 100vw, 1216px"
             style={{ objectPosition: post.image.position || "50% 30%" }}
-            className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+            className="absolute inset-0 h-full w-full object-cover"
+            imgClassName="transition duration-500 group-hover:scale-[1.03]"
           />
         ) : (
           <div
@@ -314,7 +322,7 @@ export function NewsRailItem({ post }) {
       href={`/news/${post.slug}`}
       className="group flex items-start gap-2.5 rounded-xl p-1.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/60"
     >
-      <NewsThumb post={post} className="h-16 w-16 shrink-0 rounded-lg" />
+      <NewsThumb post={post} className="h-16 w-16 shrink-0 rounded-lg" sizes="64px" />
       <div className="min-w-0 pt-0.5">
         <h3 className="line-clamp-2 text-[13px] font-extrabold leading-snug tracking-tight text-navy group-hover:text-sky-700 dark:text-white dark:group-hover:text-sky-300">
           {post.title}

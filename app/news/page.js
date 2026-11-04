@@ -18,10 +18,11 @@ import { NewsSpotlight, NewsRailItem } from "@/components/NewsRow";
 import NewsListRows from "@/components/NewsListRows";
 import { timeAgo } from "@/lib/format";
 
-// Dynamic on purpose (database phase): the News Desk's Make Live /
-// Delete must show here at once — a cached listing once served a
-// build-time "no news yet" snapshot while the database had posts.
-export const dynamic = "force-dynamic";
+// Cached for 120s (speed pass, Nov 2026): the News Desk's Make Live /
+// Delete still shows here at once, because every content mutation
+// busts this page's cache via lib/bustCache.js — freshness no longer
+// needs a per-request database render.
+export const revalidate = 120;
 
 export const metadata = {
   title: "Cricket News — Squad Updates, Team News & Tour Updates | CricCast",

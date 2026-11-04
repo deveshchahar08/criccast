@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { getLiveNewsPost, getLiveNewsPosts } from "@/lib/news";
 import { timeAgo } from "@/lib/format";
 import { NewsRail, ViewsCount } from "@/components/NewsRow";
+import NewsPhoto from "@/components/NewsPhoto";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,11 @@ export default async function NewsPostPage({ params }) {
         <>
           {/* Photo header — free-licence image only, credit underneath */}
           <figure className="mt-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <NewsPhoto
               src={post.image.src}
               alt={post.image.alt}
+              loading="eager"
+              sizes="(max-width: 768px) 100vw, 672px"
               style={{ objectPosition: post.image.position || "50% 30%" }}
               className="aspect-[16/9] w-full rounded-2xl object-cover shadow-card"
             />

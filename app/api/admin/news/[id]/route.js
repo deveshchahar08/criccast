@@ -7,6 +7,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
 import { pickNewsFields, slugify } from '@/lib/newsAdmin';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function PUT(request, { params }) {
   const auth = checkAdminToken(request);
@@ -28,6 +29,7 @@ export async function PUT(request, { params }) {
     return NextResponse.json({ error: 'Status must be draft or live.' }, { status: 400 });
   const doc = await NewsPost.findByIdAndUpdate(id, fields, { new: true }).lean();
   if (!doc) return NextResponse.json({ error: 'Post not found.' }, { status: 404 });
+  bustSiteCache();
   return NextResponse.json({ post: { ...doc, id: String(doc._id) } });
 }
 
@@ -40,5 +42,6 @@ export async function DELETE(request, { params }) {
   await dbConnect();
   const doc = await NewsPost.findByIdAndDelete(id).lean();
   if (!doc) return NextResponse.json({ error: 'Post not found.' }, { status: 404 });
+  bustSiteCache();
   return NextResponse.json({ ok: true });
 }

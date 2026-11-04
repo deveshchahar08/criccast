@@ -9,6 +9,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
 import { newsSeedPosts } from '@/lib/newsSeed';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function POST(request) {
   const auth = checkAdminToken(request);
@@ -28,5 +29,6 @@ export async function POST(request) {
     publishedAt: new Date(p.publishedAt),
   }));
   await NewsPost.insertMany(docs);
+  bustSiteCache();
   return NextResponse.json({ ok: true, seeded: docs.length });
 }

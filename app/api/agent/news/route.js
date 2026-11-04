@@ -23,6 +23,7 @@ import { checkAgentToken } from '@/lib/agentAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
 import { slugify } from '@/lib/newsAdmin';
+import { bustSiteCache } from '@/lib/bustCache';
 
 function noDb() {
   return NextResponse.json(
@@ -134,6 +135,7 @@ export async function POST(request) {
     body: pickBody(body?.body),
     sources: pickSources(body?.sources),
   });
+  bustSiteCache();
   return NextResponse.json(
     { post: { ...doc.toObject(), id: String(doc._id) } },
     { status: 201 }

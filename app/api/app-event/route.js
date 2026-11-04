@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import AppStat from '@/models/AppStat';
+import { bustSiteCache } from '@/lib/bustCache';
 
 // "YYYY-MM-DD" for today in Asia/Kolkata, whatever the server's own
 // timezone is — the owner's day, so "today" on the card is his day.
@@ -83,6 +84,7 @@ export async function POST(request) {
   const prefix = type === 'install' ? 'install' : 'first';
   await bump(`${prefix}:total`);
   await bump(`${prefix}:${kolkataDay()}`);
+  bustSiteCache();
   return new NextResponse(null, { status: 204 });
 }
 

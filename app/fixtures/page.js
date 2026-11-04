@@ -7,7 +7,7 @@ import MatchCard from "@/components/MatchCard";
 import CompactMatchRow from "@/components/CompactMatchRow";
 import FixturesViewToggle from "@/components/FixturesViewToggle";
 
-export const revalidate = 60;
+export const revalidate = 120;
 export const metadata = { title: "All Cricket Fixtures — CricCast" };
 
 function dayKey(iso) {

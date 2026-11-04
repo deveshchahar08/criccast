@@ -15,10 +15,12 @@
 //     no such event, the truthful signal is a first launch from the
 //     home-screen icon: reported once per device as "first-launch".
 //  5. Dismisses the static launch splash (#cc-splash, rendered by
-//     SplashStatic at the top of <body>) once the app has loaded —
-//     never before 1s from navigation start (the animation gets its
-//     moment) and never later than 2.6s, however slow the load.
-//     SplashStatic's own gate script carries a 4s failsafe on top.
+//     SplashStatic at the top of <body>) once the app is ready AND
+//     the splash has actually been visible for at least 1.8s — the
+//     visible-since moment is recorded by SplashStatic's gate script
+//     as window.__ccSplashAt. A hard cap hides it 5s after it became
+//     visible, however slow the load, and SplashStatic's own gate
+//     script carries a 6s failsafe on top of that.
 // Everything is guarded and failures are swallowed: this component must
 // never throw into the app.
 
@@ -112,9 +114,29 @@ export default function PwaSetup() {
       /* ignore */
     }
 
-    // Splash dismissal (installed-app launches only). performance.now()
-    // is milliseconds since navigation start, which is exactly the
-    // clock the 1s floor / 2.6s cap are measured on.
+    // Splash dismissal (installed-app launches only). The clock is
+    // VISIBLE time: SplashStatic's gate script stamps the moment the
+    // splash became visible on window.__ccSplashAt (same
+    // performance.now() timebase); if that stamp is somehow missing,
+    // fall back to now. The splash hides once the app is ready AND
+    // it has been visible for at least 1.8s; a hard cap hides it 5s
+    // after it became visible, even if 'load' is still pending.
+    const SPLASH_MIN_VISIBLE_MS = 1800;
+    const SPLASH_CAP_VISIBLE_MS = 5000;
+    let splashVisibleAt = null;
+    try {
+      splashVisibleAt =
+        typeof window.__ccSplashAt === "number" ? window.__ccSplashAt : null;
+    } catch {
+      splashVisibleAt = null;
+    }
+    if (splashVisibleAt === null) {
+      try {
+        splashVisibleAt = performance.now();
+      } catch {
+        splashVisibleAt = 0;
+      }
+    }
     let splashHidden = false;
     let splashMinTimer;
     let splashCapTimer;
@@ -139,7 +161,7 @@ export default function PwaSetup() {
     };
     const hideWhenReady = () => {
       try {
-        const wait = 1000 - performance.now();
+        const wait = splashVisibleAt + SPLASH_MIN_VISIBLE_MS - performance.now();
         if (wait <= 0) hideSplash();
         else splashMinTimer = setTimeout(hideSplash, wait);
       } catch {
@@ -150,11 +172,11 @@ export default function PwaSetup() {
       if (isStandalone()) {
         if (document.readyState === "complete") hideWhenReady();
         else window.addEventListener("load", hideWhenReady, { once: true });
-        const capWait = 2600 - performance.now();
+        const capWait = splashVisibleAt + SPLASH_CAP_VISIBLE_MS - performance.now();
         splashCapTimer = setTimeout(hideSplash, capWait > 0 ? capWait : 0);
       }
     } catch {
-      /* the gate script's 4s failsafe still covers this */
+      /* the gate script's 6s failsafe still covers this */
     }
 
     return () => {

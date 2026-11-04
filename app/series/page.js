@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { getAllSeries } from "@/lib/queries";
 
-export const revalidate = 300;
+export const revalidate = 120;
 export const metadata = { title: "Cricket Series & Broadcast Rights — CricCast" };
 
 export default async function SeriesPage() {

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function POST(request) {
   const auth = checkAdminToken(request);
@@ -20,5 +21,6 @@ export async function POST(request) {
     },
     { $set: { dismissedNewAt: new Date() } }
   );
+  bustSiteCache();
   return NextResponse.json({ ok: true, dismissed: res.modifiedCount || 0 });
 }

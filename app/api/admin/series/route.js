@@ -5,6 +5,7 @@ import { dbConnect, hasDb } from '@/lib/db';
 import Series from '@/models/Series';
 import Match from '@/models/Match';
 import SyncMeta from '@/models/SyncMeta';
+import { bustSiteCache } from '@/lib/bustCache';
 
 function noDb() {
   return NextResponse.json(
@@ -108,5 +109,6 @@ export async function POST(request) {
       { $pull: { data: name } }
     );
   }
+  bustSiteCache();
   return NextResponse.json({ series: created }, { status: 201 });
 }

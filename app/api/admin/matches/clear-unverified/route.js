@@ -6,6 +6,7 @@ import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
 import Series from '@/models/Series';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function DELETE(request) {
   const auth = checkAdminToken(request);
@@ -23,6 +24,7 @@ export async function DELETE(request) {
     _id: { $nin: usedSeries },
     createdAt: { $lt: dayAgo },
   });
+  bustSiteCache();
   return NextResponse.json({
     deleted: result.deletedCount || 0,
     prunedSeries: pruned.deletedCount || 0,

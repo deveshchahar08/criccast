@@ -5,6 +5,7 @@ import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
 import Series from '@/models/Series';
 import { effectiveStatus } from '@/lib/queries';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function GET(request) {
   const auth = checkAdminToken(request);
@@ -77,6 +78,7 @@ export async function POST(request) {
       // time with a wrong feed value. Unlock lives in the Edit form.
       startTimeLocked: true,
     });
+    bustSiteCache();
     return NextResponse.json({ match: created }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err.message || 'Create failed.' }, { status: 400 });

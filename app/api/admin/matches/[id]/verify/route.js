@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { checkAdminToken } from '@/lib/adminAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import Match from '@/models/Match';
+import { bustSiteCache } from '@/lib/bustCache';
 
 export async function POST(request, { params }) {
   const auth = checkAdminToken(request);
@@ -19,5 +20,6 @@ export async function POST(request, { params }) {
     { new: true }
   );
   if (!updated) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+  bustSiteCache();
   return NextResponse.json({ match: updated });
 }

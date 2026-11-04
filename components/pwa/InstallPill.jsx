@@ -113,8 +113,8 @@ export default function InstallPill() {
   if (!visible || pathname === "/install") return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 md:inset-x-auto md:right-6 md:bottom-6 md:justify-end md:px-0">
-      <div className="flex items-center gap-1 rounded-full bg-navy py-1.5 pr-1.5 pl-4 shadow-lg shadow-navy/30 dark:bg-white">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 md:inset-x-auto md:right-6 md:bottom-6 md:justify-end md:px-0">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-navy py-1.5 pr-1.5 pl-4 shadow-lg shadow-navy/30 dark:bg-white">
         <button
           type="button"
           onClick={handleClick}

@@ -29,6 +29,7 @@ import { checkAgentToken } from '@/lib/agentAuth';
 import { dbConnect, hasDb } from '@/lib/db';
 import NewsPost from '@/models/NewsPost';
 import { PHOTO_MAX_BYTES, PHOTO_TYPES, photoStorageReady, storeNewsPhoto } from '@/lib/photoStore';
+import { bustSiteCache } from '@/lib/bustCache';
 
 function noDb() {
   return NextResponse.json(
@@ -159,6 +160,7 @@ export async function POST(request, { params }) {
       doc.status = 'live';
       doc.publishedAt = new Date();
       await doc.save();
+      bustSiteCache();
     }
     return NextResponse.json({ post: { ...doc.toObject(), id: String(doc._id) } });
   }
@@ -179,6 +181,7 @@ export async function POST(request, { params }) {
     );
   doc.image = image;
   await doc.save();
+  bustSiteCache();
   return NextResponse.json({ ok: true, id: String(doc._id), slug: doc.slug, image });
 }
 
@@ -186,6 +189,7 @@ async function deletePost(doc) {
   const id = String(doc._id);
   const slug = doc.slug;
   await doc.deleteOne();
+  bustSiteCache();
   return NextResponse.json({ ok: true, id, slug, deleted: true });
 }
 
@@ -272,6 +276,7 @@ async function updatePost(doc, body) {
   }
   Object.assign(doc, patch);
   await doc.save();
+  bustSiteCache();
   return NextResponse.json({
     ok: true,
     id: String(doc._id),
@@ -347,5 +352,6 @@ async function uploadPhoto(doc, body) {
     );
   doc.image = image;
   await doc.save();
+  bustSiteCache();
   return NextResponse.json({ ok: true, id: String(doc._id), slug: doc.slug, image });
 }

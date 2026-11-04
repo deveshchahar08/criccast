@@ -19,6 +19,7 @@ function NewsListRow({ post }) {
       <NewsThumb
         post={post}
         className="aspect-[16/9] w-full shrink-0 rounded-xl sm:w-[290px] lg:w-[320px]"
+        sizes="(max-width: 640px) 100vw, 320px"
       />
       <div className="min-w-0">
         <h3 className="text-[17px] font-extrabold leading-snug tracking-tight text-navy group-hover:text-sky-700 lg:text-lg dark:text-white dark:group-hover:text-sky-300">

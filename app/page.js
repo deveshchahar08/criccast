@@ -1,4 +1,4 @@
-// HOME — server component, revalidated every 60s.
+// HOME — server component, revalidated every 120s.
 // Responsive: phone = single column (Pic 2 scroll design), tablet = 2-col,
 // desktop = hero + navbar + 2/3-col grids (Hy's approved Stitch design).
 import { getHomeMatches, getAllSeries, getHomeNote, splitFeatured } from "@/lib/queries";
@@ -13,7 +13,7 @@ import CompactMatchRow from "@/components/CompactMatchRow";
 import NewsRow, { NewsCard, NewsFeatured, NewsRail } from "@/components/NewsRow";
 import HeroSearch from "@/components/HeroSearch";
 
-export const revalidate = 60;
+export const revalidate = 120;
 
 export const metadata = {
   title: "CricCast — Where to Watch Cricket Matches on TV & OTT in India",
