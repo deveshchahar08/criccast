@@ -14,13 +14,15 @@
 //     counted (many people click and back out). For iPhone, which has
 //     no such event, the truthful signal is a first launch from the
 //     home-screen icon: reported once per device as "first-launch".
-//  5. Renders the SplashScreen overlay (which itself decides, after
-//     mount, whether this is an installed-app launch worth showing).
+//  5. Dismisses the static launch splash (#cc-splash, rendered by
+//     SplashStatic at the top of <body>) once the app has loaded —
+//     never before 1s from navigation start (the animation gets its
+//     moment) and never later than 2.6s, however slow the load.
+//     SplashStatic's own gate script carries a 4s failsafe on top.
 // Everything is guarded and failures are swallowed: this component must
 // never throw into the app.
 
 import { useEffect } from "react";
-import SplashScreen from "./SplashScreen";
 
 const FIRST_LAUNCH_KEY = "cc-first-launch-counted";
 
@@ -110,15 +112,64 @@ export default function PwaSetup() {
       /* ignore */
     }
 
+    // Splash dismissal (installed-app launches only). performance.now()
+    // is milliseconds since navigation start, which is exactly the
+    // clock the 1s floor / 2.6s cap are measured on.
+    let splashHidden = false;
+    let splashMinTimer;
+    let splashCapTimer;
+    let splashRemoveTimer;
+    const hideSplash = () => {
+      if (splashHidden) return;
+      splashHidden = true;
+      try {
+        const el = document.getElementById("cc-splash");
+        if (!el) return;
+        el.classList.add("cc-splash-hide");
+        splashRemoveTimer = setTimeout(() => {
+          try {
+            el.remove();
+          } catch {
+            /* ignore */
+          }
+        }, 350);
+      } catch {
+        /* ignore */
+      }
+    };
+    const hideWhenReady = () => {
+      try {
+        const wait = 1000 - performance.now();
+        if (wait <= 0) hideSplash();
+        else splashMinTimer = setTimeout(hideSplash, wait);
+      } catch {
+        hideSplash();
+      }
+    };
+    try {
+      if (isStandalone()) {
+        if (document.readyState === "complete") hideWhenReady();
+        else window.addEventListener("load", hideWhenReady, { once: true });
+        const capWait = 2600 - performance.now();
+        splashCapTimer = setTimeout(hideSplash, capWait > 0 ? capWait : 0);
+      }
+    } catch {
+      /* the gate script's 4s failsafe still covers this */
+    }
+
     return () => {
       try {
         window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
         window.removeEventListener("appinstalled", onAppInstalled);
+        window.removeEventListener("load", hideWhenReady);
+        clearTimeout(splashMinTimer);
+        clearTimeout(splashCapTimer);
+        clearTimeout(splashRemoveTimer);
       } catch {
         /* ignore */
       }
     };
   }, []);
 
-  return <SplashScreen />;
+  return null;
 }
