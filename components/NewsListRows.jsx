@@ -7,7 +7,7 @@
 // decides how many posts to pass (6 on /news, one page of 8 on
 // /news/all) — pagination keeps every page light.
 import Link from "next/link";
-import { NewsThumb } from "./NewsRow";
+import { NewsThumb, ViewsCount } from "./NewsRow";
 import { timeAgo } from "@/lib/format";
 
 function NewsListRow({ post }) {
@@ -34,7 +34,7 @@ function NewsListRow({ post }) {
           <span aria-hidden>•</span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
           <span aria-hidden>•</span>
-          <span>👁 {post.views || 0}</span>
+          <ViewsCount views={post.views} />
         </p>
       </div>
     </Link>

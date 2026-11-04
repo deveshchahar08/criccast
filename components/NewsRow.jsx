@@ -6,6 +6,41 @@
 import Link from "next/link";
 import { timeAgo } from "@/lib/format";
 
+// View count — outline eye icon (stroke style, matching the site's
+// other icons) + the number, wrapped in ONE nowrap inline-flex unit so
+// the pair never splits across lines. The icon uses currentColor, so it
+// inherits the surrounding meta text colour and renders identically on
+// every platform (the old emoji eye showed as a heavy colour glyph and
+// clashed with the design).
+export function ViewsCount({
+  views,
+  className = "",
+  iconClassName = "h-3.5 w-3.5",
+  word = false,
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 whitespace-nowrap ${className}`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={iconClassName}
+        aria-hidden="true"
+      >
+        <path d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+        <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+      </svg>
+      {views || 0}
+      {word ? " views" : null}
+    </span>
+  );
+}
+
 export function NewsThumb({ post, className = "" }) {
   if (post.image) {
     return (
@@ -54,7 +89,7 @@ export default function NewsRow({ post }) {
             {post.tag}
           </span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
-          <span>👁 {post.views || 0}</span>
+          <ViewsCount views={post.views} />
         </p>
         <h3 className="mt-1 line-clamp-3 text-[15px] font-extrabold leading-snug tracking-tight text-navy dark:text-white">
           {post.title}
@@ -90,7 +125,7 @@ export function NewsCard({ post }) {
               {post.tag}
             </span>
             <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
-            <span>👁 {post.views || 0}</span>
+            <ViewsCount views={post.views} />
           </p>
           <h3 className="mt-1 line-clamp-3 text-sm font-extrabold leading-snug tracking-tight text-navy dark:text-white">
             {post.title}
@@ -133,9 +168,10 @@ export function NewsFeatured({ post }) {
               >
                 {timeAgo(post.publishedAt)}
               </time>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-                👁 {post.views || 0}
-              </span>
+              <ViewsCount
+                views={post.views}
+                className="text-xs font-medium text-slate-400 dark:text-slate-500"
+              />
             </span>
           </div>
           <h3 className="mt-2.5 text-xl font-extrabold leading-snug tracking-tight text-navy md:text-2xl dark:text-white">
@@ -232,9 +268,10 @@ export function NewsSpotlight({ post }) {
             >
               {timeAgo(post.publishedAt)}
             </time>
-            <span className="text-xs font-medium text-white/70">
-              👁 {post.views || 0}
-            </span>
+            <ViewsCount
+              views={post.views}
+              className="text-xs font-medium text-white/70"
+            />
           </div>
           <h2 className="mt-3 max-w-3xl text-2xl font-extrabold leading-tight tracking-tight text-white md:text-4xl">
             {post.title}
@@ -287,7 +324,7 @@ export function NewsRailItem({ post }) {
             {post.tag}
           </span>
           <time dateTime={post.publishedAt}>{timeAgo(post.publishedAt)}</time>
-          <span>👁 {post.views || 0}</span>
+          <ViewsCount views={post.views} />
         </p>
       </div>
     </Link>

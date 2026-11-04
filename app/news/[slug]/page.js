@@ -9,7 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLiveNewsPost, getLiveNewsPosts } from "@/lib/news";
 import { timeAgo } from "@/lib/format";
-import { NewsRail } from "@/components/NewsRow";
+import { NewsRail, ViewsCount } from "@/components/NewsRow";
 
 export const dynamic = "force-dynamic";
 
@@ -88,9 +88,12 @@ export default async function NewsPostPage({ params }) {
               >
                 {formatDateIST(post.publishedAt)} · {timeAgo(post.publishedAt)}
               </time>
-              <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-                👁 {post.views || 0} views
-              </span>
+              <ViewsCount
+                views={post.views}
+                word
+                iconClassName="h-4 w-4"
+                className="text-xs font-medium text-slate-400 dark:text-slate-500"
+              />
             </div>
             <h1 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-navy md:text-3xl dark:text-white">
               {post.title}
@@ -115,9 +118,12 @@ export default async function NewsPostPage({ params }) {
               >
                 {formatDateIST(post.publishedAt)} · {timeAgo(post.publishedAt)}
               </time>
-              <span className="text-xs font-medium text-slate-300">
-                👁 {post.views || 0} views
-              </span>
+              <ViewsCount
+                views={post.views}
+                word
+                iconClassName="h-4 w-4"
+                className="text-xs font-medium text-slate-300"
+              />
             </div>
             <h1 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-white md:text-3xl">
               {post.title}
