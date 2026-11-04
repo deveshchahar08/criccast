@@ -3,6 +3,8 @@ import "./globals.css";
 import { DthProvider } from "@/components/DthProvider";
 import ThemeInitScript from "@/components/ThemeInitScript";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import VercelAnalytics from "@/components/VercelAnalytics";
+import MicrosoftClarity from "@/components/MicrosoftClarity";
 import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import Footer from "@/components/Footer";
@@ -29,6 +31,8 @@ export default function RootLayout({ children }) {
             "Encountered a script tag while rendering" console error. */}
         <ThemeInitScript />
         <GoogleAnalytics />
+        <VercelAnalytics />
+        <MicrosoftClarity />
         <DthProvider>
           <TopBar />
           {/* pb leaves room for the fixed mobile bottom nav */}

@@ -9,16 +9,63 @@ import Countdown from "@/components/Countdown";
 export const revalidate = 60;
 
 // SEO: one page per match — this is the Google-traffic play.
+// Title trial (from 4 Nov 2026, one week, then judged on GSC CTR/position):
+// the title now carries the match number/format and follows the ACTUAL
+// broadcast — lead TV channel + lead OTT app when both exist, the app alone
+// when the match is OTT-only, "Watch Free" when the lead route is free.
+// The DTH-number hook lives in the description. Fallback = the old formula.
 export async function generateMetadata({ params }) {
   const { id } = await params; // Next.js 16: params is a Promise
   const { match } = await getMatchById(id);
   if (!match) return { title: "Match not found — CricCast" };
-  // Title targets the exact query fans type: "<team> vs <team> where to watch"
-  const title = `${match.teams[0]} vs ${match.teams[1]} — Where to Watch on TV & OTT | CricCast`;
-  return {
-    title,
-    description: `Where to watch ${match.teams[0]} vs ${match.teams[1]} (${match.seriesName}) in India: TV channels, OTT apps and DTH channel numbers. Verified by us.`,
-  };
+
+  const versus = `${match.teams[0]} vs ${match.teams[1]}`;
+  // matchNumber often already carries the format ("1st ODI", "3rd T20") —
+  // append the format only when it is a search format (not "First Class")
+  // and is not already inside the match number.
+  const num = match.matchNumber || "";
+  const fmt = /^(ODI|T20I?|T10|Test)$/i.test(match.format || "") ? match.format : "";
+  const tag =
+    num && fmt && !num.toLowerCase().includes(fmt.toLowerCase())
+      ? `${num} ${fmt}`
+      : num || fmt || "";
+  const headed = tag ? `${versus} ${tag}` : versus;
+  const b = match.broadcast || { tvChannels: [], ottPlatforms: [] };
+  const tv = (b.tvChannels || [])[0];
+  const ott = (b.ottPlatforms || [])[0];
+
+  let title;
+  if (tv && ott) {
+    title = `${headed}: Where to Watch — ${tv.name} & ${ott.name} | CricCast`;
+    // Very long team names: drop the OTT name before anything else.
+    if (title.length > 95) title = `${headed}: Where to Watch on ${tv.name} | CricCast`;
+  } else if (tv) {
+    title = `${headed}: Where to Watch on ${tv.name} | CricCast`;
+  } else if (ott) {
+    title = ott.free
+      ? `${headed} — Watch Free on ${ott.name} | CricCast`
+      : `${headed} — Where to Watch on ${ott.name} | CricCast`;
+  } else {
+    title = `${versus} — Where to Watch on TV & OTT | CricCast`;
+  }
+
+  const nums = [];
+  if (tv?.numbers?.tataPlay) nums.push(`Tata Play ${tv.numbers.tataPlay}`);
+  if (tv?.numbers?.airtel) nums.push(`Airtel ${tv.numbers.airtel}`);
+  const numText = nums.length ? ` (${nums.join(", ")})` : "";
+
+  let description;
+  if (tv && ott) {
+    description = `Watch ${headed} live in India on ${tv.name}${numText} and ${ott.name}. Full DTH channel numbers for every operator — verified by CricCast.`;
+  } else if (tv) {
+    description = `Watch ${headed} live in India on ${tv.name}${numText}. Full DTH channel numbers for every operator — verified by CricCast.`;
+  } else if (ott) {
+    description = `Watch ${headed} live in India on ${ott.name}${ott.free ? " — free to watch" : ""}. Streaming details and match info — verified by CricCast.`;
+  } else {
+    description = `Where to watch ${versus} (${match.seriesName}) in India: TV channels, OTT apps and DTH channel numbers. Verified by us.`;
+  }
+
+  return { title, description };
 }
 
 function StatusLine({ match }) {

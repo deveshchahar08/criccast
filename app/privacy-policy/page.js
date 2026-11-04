@@ -104,6 +104,16 @@ export default function PrivacyPolicyPage() {
             can block analytics cookies through your browser settings
             without affecting how the Site works.
           </p>
+          <p>
+            We also use <strong>Vercel Analytics</strong> for anonymous,
+            cookie-free page-view counts, and{" "}
+            <strong>Microsoft Clarity</strong> to understand how visitors
+            use our pages (for example, how far a page is scrolled and
+            which buttons are tapped). Clarity may record anonymous session
+            behaviour with text typed into fields masked, and it is never
+            loaded on our admin pages. Neither service identifies you
+            personally, and neither is used for advertising profiling.
+          </p>
         </section>
 
         <section>
