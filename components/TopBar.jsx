@@ -3,6 +3,7 @@ import { getLiveCount } from "@/lib/queries";
 import ThemeToggle from "./ThemeToggle";
 import NavLinks from "./NavLinks";
 import SearchBox from "./SearchBox";
+import NavDownloadButton from "./pwa/NavDownloadButton";
 
 export default async function TopBar() {
   const liveCount = await getLiveCount();
@@ -38,6 +39,7 @@ export default async function TopBar() {
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <SearchBox />
+          <NavDownloadButton />
         </div>
       </div>
     </header>

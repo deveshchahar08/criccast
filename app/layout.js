@@ -26,6 +26,19 @@ export const metadata = {
     capable: true,
     title: "CricCast",
     statusBarStyle: "default",
+    // iOS launch images (navy splash with the badge) — without these,
+    // an installed app opens on a plain white screen. One entry per
+    // common iPhone size; media uses CSS pixels + pixel ratio.
+    startupImage: [
+      { url: "/splash/apple-splash-750-1334.png", media: "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" },
+      { url: "/splash/apple-splash-828-1792.png", media: "(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)" },
+      { url: "/splash/apple-splash-1125-2436.png", media: "(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/apple-splash-1170-2532.png", media: "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/apple-splash-1179-2556.png", media: "(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/apple-splash-1242-2688.png", media: "(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/apple-splash-1284-2778.png", media: "(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)" },
+      { url: "/splash/apple-splash-1290-2796.png", media: "(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" },
+    ],
   },
 };
 
@@ -48,8 +61,10 @@ export default function RootLayout({ children }) {
         <MicrosoftClarity />
         <DthProvider>
           <TopBar />
-          {/* pb leaves room for the fixed mobile bottom nav */}
-          <main className="pb-28 md:pb-10">{children}</main>
+          {/* pb leaves room for the fixed mobile bottom nav — the
+              safe-area term grows it in step with the nav's own
+              home-indicator padding (iPhone) */}
+          <main className="pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-10">{children}</main>
           <Footer />
           <BottomNav />
         </DthProvider>

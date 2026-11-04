@@ -2,10 +2,10 @@
 // Purely additive: removing this file removes the install metadata cleanly.
 export default function manifest() {
   return {
-    name: "CricCast — Where to Watch Cricket in India",
+    name: "CricCast",
     short_name: "CricCast",
     description:
-      "Verified cricket broadcast info for India — TV channels, DTH channel numbers and OTT, for every match.",
+      "CricCast — Where to Watch Cricket in India. Verified cricket broadcast info for India — TV channels, DTH channel numbers and OTT, for every match.",
     id: "/",
     start_url: "/",
     scope: "/",
@@ -13,7 +13,7 @@ export default function manifest() {
     orientation: "portrait",
     lang: "en-IN",
     categories: ["sports"],
-    background_color: "#E9F4FE",
+    background_color: "#0B2545",
     theme_color: "#0B2545",
     icons: [
       {

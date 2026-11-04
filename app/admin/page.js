@@ -1274,6 +1274,43 @@ function HomeNoteEditor({ call }) {
   );
 }
 
+// App install stats — reads /api/app-event (admin-token GET). Counts
+// are REAL installs only: completed `appinstalled` events, plus first
+// standalone launches (the iPhone signal). A failed fetch shows
+// dashes; this card must never break the admin page.
+function AppStatsCard({ call }) {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { ok, data } = await call("/api/app-event");
+        if (ok) setStats(data);
+      } catch {}
+    })();
+  }, [call]);
+
+  const num = (n) => (typeof n === "number" ? n : "—");
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+      <div className="mb-2 text-sm font-extrabold dark:text-white">📱 App installs</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-2xl font-extrabold text-navy dark:text-white">{num(stats?.installTotal)}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            Confirmed installs (Android) · today: {num(stats?.installToday)}
+          </div>
+        </div>
+        <div>
+          <div className="text-2xl font-extrabold text-navy dark:text-white">{num(stats?.firstTotal)}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            First app opens (incl. iPhone) · today: {num(stats?.firstToday)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { token, saveToken, call } = useAdminApi();
   const [draft, setDraft] = useState("");
@@ -1328,6 +1365,7 @@ export default function AdminPage() {
         </button>
       </div>
       <HomeNoteEditor call={call} />
+      <AppStatsCard call={call} />
       <div className="mb-4 flex gap-2">
         {(["matches", "series", "recheck", "news"]).map((t) => (
           <button
