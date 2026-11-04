@@ -2,10 +2,12 @@
 const nextConfig = {
   images: {
     // Every remote host a live news photo is served from (home + /news
-    // crawled 2026-11-04). Listing them here only PERMITS the Next.js
-    // image optimizer to fetch from them — components/NewsPhoto.jsx
-    // keeps its own, empirically verified allowlist and falls back to
-    // a plain <img> for any host the optimizer cannot actually fetch.
+    // crawled 2026-11-04), plus a wildcard so a photo host added later
+    // is optimizer-eligible without a config change. Listing a host
+    // here only PERMITS the Next.js image optimizer to fetch from it —
+    // components/NewsPhoto.jsx sends its few known-bad hosts direct
+    // and self-heals in the browser (plain <img>) any photo the
+    // optimizer cannot actually fetch.
     remotePatterns: [
       { protocol: "https", hostname: "assets-webp.khelnow.com" },
       { protocol: "https", hostname: "assets.khelnow.com" },
@@ -37,6 +39,7 @@ const nextConfig = {
       { protocol: "https", hostname: "www.thenews.pk" },
       { protocol: "https", hostname: "www.tribuneindia.com" },
       { protocol: "https", hostname: "www.wisden.com" },
+      { protocol: "https", hostname: "**" },
     ],
   },
 };

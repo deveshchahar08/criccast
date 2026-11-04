@@ -14,10 +14,13 @@
 //     is running as an installed app (standalone display mode, or
 //     iOS's navigator.standalone) it adds `cc-app` to <html>, and only
 //     then can the splash below become visible. It also records when
-//     the splash became visible (window.__ccSplashAt) so PwaSetup can
-//     time the dismissal by visible time, and arms a 6s failsafe that
-//     force-hides the splash, so a broken page can never trap anyone
-//     behind it.
+//     the splash became visible (window.__ccSplashAt — PwaSetup's
+//     fallback clock if the browser reports no paint timing), and
+//     arms a 10s failsafe that force-hides the splash, so a broken
+//     page can never trap anyone behind it. The failsafe is 10s,
+//     not less, because PwaSetup's visible-time minimum is measured
+//     from first paint, which on a very slow phone can land seconds
+//     after this script runs; the failsafe must stay clear of it.
 //  2. The splash markup returned here is plain SSR HTML at the top of
 //     <body>. Its <style> (same injection route) hides it by default;
 //     `html.cc-app` turns it into a fixed navy overlay whose CSS
@@ -28,14 +31,15 @@
 //     prefers-reduced-motion.) This matches the iOS launch image, so
 //     the two read as one continuous screen.
 //  3. PwaSetup dismisses the splash once the app has loaded AND the
-//     splash has been visible for at least 1.8s (hard cap 5s), by
-//     adding `cc-splash-hide` and removing the node.
+//     splash has been visible for at least 1.8s (hard cap 5s), with
+//     visible time measured from first paint, by adding
+//     `cc-splash-hide` and removing the node.
 // A normal browser visit never gets `cc-app`, so the splash is
 // display:none and costs nothing. Fully defensive throughout.
 
 import { useServerInsertedHTML } from "next/navigation";
 
-const GATE_JS = `(function(){try{var standalone=false;try{standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}catch(e){}if(standalone){document.documentElement.classList.add('cc-app');try{window.__ccSplashAt=performance.now();}catch(e){}}setTimeout(function(){try{var s=document.getElementById('cc-splash');if(s){s.classList.add('cc-splash-hide');setTimeout(function(){try{s.style.display='none';}catch(e){}},350);}}catch(e){}},6000);}catch(e){}})()`;
+const GATE_JS = `(function(){try{var standalone=false;try{standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}catch(e){}if(standalone){document.documentElement.classList.add('cc-app');try{window.__ccSplashAt=performance.now();}catch(e){}}setTimeout(function(){try{var s=document.getElementById('cc-splash');if(s){s.classList.add('cc-splash-hide');setTimeout(function(){try{s.style.display='none';}catch(e){}},350);}}catch(e){}},10000);}catch(e){}})()`;
 
 const SPLASH_CSS = `
 #cc-splash{display:none;}
@@ -46,7 +50,7 @@ html.cc-app #cc-splash{
 }
 html.cc-app #cc-splash.cc-splash-hide{opacity:0;pointer-events:none;}
 #cc-splash .cc-splash-badgewrap{
-  position:relative;display:block;width:112px;height:112px;
+  position:relative;display:block;width:152px;height:152px;margin-top:104.2px;
   animation:ccSplashIn .5s ease-out both;
 }
 #cc-splash .cc-splash-badgewrap::after{
@@ -55,7 +59,7 @@ html.cc-app #cc-splash.cc-splash-hide{opacity:0;pointer-events:none;}
   animation:ccSplashRing 1.6s ease-out .5s infinite;
 }
 #cc-splash .cc-splash-badge{
-  display:block;width:112px;height:112px;
+  display:block;width:152px;height:152px;
   animation:ccSplashBreath 2.4s ease-in-out 1s infinite;
 }
 #cc-splash .cc-splash-name{

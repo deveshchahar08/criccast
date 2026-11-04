@@ -1,41 +1,69 @@
+"use client";
+
 // NewsPhoto — a news post's photo, served through the Next.js image
-// optimizer when the photo's host allows it (speed pass, Nov 2026).
+// optimizer whenever possible, with a browser-side self-heal so a
+// photo can never stay broken (self-heal pass, Nov 2026).
 //
-// Why: cards display photos at ≤ ~480px wide, but the raw <img> tags
-// shipped the publishers' full-size originals (one stored photo alone
-// was 149 KB). The optimizer resizes + recompresses per device.
+// Why the optimizer: cards display photos at ≤ ~480px wide, but raw
+// <img> tags ship the publishers' full-size originals (one stored
+// photo alone was 149 KB). The optimizer resizes + recompresses per
+// device.
 //
-// The allowlist below is EMPIRICAL, not hopeful: on 2026-11-04 every
-// live photo host was probed with a bare server-side fetch (no
-// browser headers, no referer — the conditions the optimizer's own
-// fetch faces), and only the hosts listed here answered 200 with an
-// image content-type. Deliberately EXCLUDED after failing that probe:
-// images.mykhel.com (403 — hotlink protection) and st1.latestly.com
-// (no server-side response). Any other src — an excluded host, an
-// http:// URL, or a source added later — falls back to a plain <img>
-// with the identical classes, so a photo can never break because of
-// this component; it can only stay unoptimized. Site-relative photos
-// ("/news/…", the site's own files in public/) always optimize —
-// they need no remote pattern.
+// Why optimizer-first for EVERY https host (not an allowlist): an
+// allowlist meant every new bad host was a code change + redeploy —
+// production proved the class is real when cdn.vivasport.com started
+// answering the optimizer 502 while its photos loaded fine directly.
+// So the only hosts that skip the optimizer are the three in
+// DIRECT_PHOTO_HOSTS, each empirically bad for the optimizer's own
+// server-side fetch (no browser headers, no referer):
+// - images.mykhel.com — 403, hotlink protection
+// - st1.latestly.com — no server-side response at all
+// - cdn.vivasport.com — optimizer 502 in production (2026-11-04)
+// while its photos load fine straight from the browser.
 //
-// Rendering contract (matches the <img> tags this replaces):
+// The safety net for every OTHER host, present or future: if the
+// optimizer ever fails a photo — any host, any reason — the browser
+// reports it through the image's onError and this component swaps
+// that one photo to the plain direct <img> (identical markup to the
+// direct path below). No code fix, no redeploy, ever. The failure is
+// keyed to the src that failed, so a reused component instance given
+// a new src tries the optimizer for it afresh. The direct <img>
+// carries no onError, so a photo whose original is itself gone just
+// stays broken — there is no retry loop.
+//
+// OPTIMIZED_PHOTO_HOSTS is kept as the record of hosts probed good
+// on 2026-11-04 (bare server-side fetch: 200 + image content-type);
+// the component's gating no longer consults it — DIRECT_PHOTO_HOSTS
+// plus the self-heal decide — but the list stays exported and
+// truthful for future tooling.
+//
+// Site-relative photos ("/news/…", the site's own files in public/)
+// optimize too, under the same safety net. Non-https or unparseable
+// srcs render direct, as they always have.
+//
+// First render is deterministic — optimized unless a rule above says
+// direct — so server and client markup never disagree; the swap, if
+// it happens, happens after the browser reports the failure.
+//
+// Rendering contract (unchanged; matches the <img> tags this
+// replaced):
 // - `className` is the photo box's classes (size / aspect / rounding),
 //   exactly as the old <img> carried them. On the optimized path they
-//   sit on a wrapper span and the image fills it; on the fallback path
+//   sit on a wrapper span and the image fills it; on the direct path
 //   they sit on the <img> itself, unchanged.
 // - `style.objectPosition` is honoured on both paths.
 // - `imgClassName` holds classes that belong to the <img> element
 //   itself (e.g. the spotlight's hover zoom): applied to the inner
-//   image on the optimized path, merged onto the <img> on fallback.
+//   image on the optimized path, merged onto the <img> on direct.
 // - `loading` passes through ("lazy" stays lazy; heroes/spotlights
 //   pass "eager").
+import { useState } from "react";
 import Image from "next/image";
 
 export const OPTIMIZED_PHOTO_HOSTS = new Set([
   "assets-webp.khelnow.com",
   "assets.khelnow.com",
   "bik6vsqkrwq5dvf4.public.blob.vercel-storage.com",
-  "cdn.vivasport.com",
   "cf-img-a-in.tosshub.com",
   "content.api.news",
   "cricketnamibia.com",
@@ -61,14 +89,24 @@ export const OPTIMIZED_PHOTO_HOSTS = new Set([
   "www.wisden.com",
 ]);
 
-function isOptimized(src) {
-  if (!src) return false;
-  if (src.startsWith("/")) return true; // the site's own photo files
+export const DIRECT_PHOTO_HOSTS = new Set([
+  "cdn.vivasport.com",
+  "images.mykhel.com",
+  "st1.latestly.com",
+]);
+
+// "optimized" = try the Next.js image optimizer (with the self-heal
+// net); "direct" = plain <img> from the start.
+function routeFor(src) {
+  if (!src) return "direct";
+  if (src.startsWith("/")) return "optimized"; // the site's own photo files
   try {
     const u = new URL(src);
-    return u.protocol === "https:" && OPTIMIZED_PHOTO_HOSTS.has(u.hostname);
+    if (u.protocol !== "https:") return "direct";
+    if (DIRECT_PHOTO_HOSTS.has(u.hostname)) return "direct";
+    return "optimized";
   } catch {
-    return false;
+    return "direct";
   }
 }
 
@@ -81,7 +119,11 @@ export default function NewsPhoto({
   loading,
   sizes = "(max-width: 768px) 100vw, 480px",
 }) {
-  if (!isOptimized(src)) {
+  // The src whose optimized load the browser reported as failed.
+  // Keyed by value: a different src retries the optimizer.
+  const [failedSrc, setFailedSrc] = useState(null);
+
+  if (routeFor(src) === "direct" || failedSrc === src) {
     const cls = imgClassName ? `${className} ${imgClassName}` : className;
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -103,6 +145,7 @@ export default function NewsPhoto({
         fill
         sizes={sizes}
         loading={loading}
+        onError={() => setFailedSrc(src)}
         style={{ objectFit: "cover", objectPosition: objectPosition || "50% 30%" }}
         className={imgClassName}
       />

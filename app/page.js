@@ -2,7 +2,7 @@
 // Responsive: phone = single column (Pic 2 scroll design), tablet = 2-col,
 // desktop = hero + navbar + 2/3-col grids (Hy's approved Stitch design).
 import { getHomeMatches, getAllSeries, getHomeNote, splitFeatured } from "@/lib/queries";
-import { getLiveNewsPosts } from "@/lib/news";
+import { getLiveNewsCards } from "@/lib/news";
 import { dayDiffIST } from "@/lib/format";
 import Link from "next/link";
 import DthSelector from "@/components/DthSelector";
@@ -28,10 +28,15 @@ export default async function Home({ searchParams }) {
   const freeOnly = sp?.free === "1";
   const when = sp?.when || undefined; // live | today | tomorrow
 
-  const [{ matches, sample }, { series }, homeNote] = await Promise.all([
+  // News cards ride in the SAME parallel block: they are independent
+  // of matches/series/note, and awaiting them afterwards used to add a
+  // whole serial database round trip to every home render. Home only
+  // renders cards, so it uses the projected card variant (lib/news).
+  const [{ matches, sample }, { series }, homeNote, allNews] = await Promise.all([
     getHomeMatches({ seriesId }),
     getAllSeries(),
     getHomeNote(),
+    getLiveNewsCards(),
   ]);
 
   // Base list for tab counts (before the when-filter)
@@ -64,7 +69,7 @@ export default async function Home({ searchParams }) {
   // is the featured card, the next three sit under it (photo cards on
   // desktop, list rows on mobile), and the latest posts fill the
   // full-height Latest News drawer rail on the right (Fix Round 2).
-  const allNews = await getLiveNewsPosts();
+  // (allNews was fetched in the parallel block above.)
   const [topNews, ...restNews] = allNews;
   const cardNews = restNews.slice(0, 3);
 
