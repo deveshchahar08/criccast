@@ -10,7 +10,7 @@ export default async function sitemap() {
   const now = new Date();
 
   const [{ matches }, { series }, newsPosts] = await Promise.all([
-    getHomeMatches({}),
+    getHomeMatches({ limit: 5000 }),
     getAllSeries(),
     getLiveNewsPosts(),
   ]);

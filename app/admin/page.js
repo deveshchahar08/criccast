@@ -116,6 +116,7 @@ function SeriesTab({ call, refresh, editSeriesRequest, onEditMatch }) {
   const [seriesMatches, setSeriesMatches] = useState({});
   const [loadingMatches, setLoadingMatches] = useState({});
   const [actionOnly, setActionOnly] = useState(true);
+  const [armDeleteId, setArmDeleteId] = useState(null);
   const formRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -145,12 +146,23 @@ function SeriesTab({ call, refresh, editSeriesRequest, onEditMatch }) {
     } else setMsg(data.error || "Verify failed.");
   };
   const removeMatch = async (mid, sid) => {
-    if (!confirm("Delete this match?")) return;
     const { ok, data } = await call(`/api/admin/matches/${mid}`, { method: "DELETE" });
     if (ok) {
       setSeriesMatches((prev) => ({ ...prev, [sid]: (prev[sid] || []).filter((m) => m.id !== mid) }));
       load();
     } else setMsg(data.error || "Delete failed.");
+  };
+  // v67: two-tap Delete, same pattern as the Matches tab — the first
+  // tap arms the row's button ("Pakka delete?") for 3 seconds; only a
+  // second tap inside that window actually deletes.
+  const askRemoveMatch = (mid, sid) => {
+    if (armDeleteId !== mid) {
+      setArmDeleteId(mid);
+      setTimeout(() => setArmDeleteId((cur) => (cur === mid ? null : cur)), 3000);
+      return;
+    }
+    setArmDeleteId(null);
+    removeMatch(mid, sid);
   };
   const markFinishedSeries = async (mid, sid) => {
     if (!confirm("Mark this match as finished? It will disappear from the site.")) return;
@@ -347,7 +359,7 @@ function SeriesTab({ call, refresh, editSeriesRequest, onEditMatch }) {
                     the Matches tab's 200-soonest list, so their edit form was
                     unreachable. Opens the same form in the Matches tab. */}
                 <button onClick={() => onEditMatch && onEditMatch({ ...m, seriesId: m.seriesId || s.id })} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700">Edit</button>
-                <button onClick={() => removeMatch(m.id, s.id)} className={dangerCls}>Delete</button>
+                <button onClick={() => askRemoveMatch(m.id, s.id)} className={armDeleteId === m.id ? "rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" : dangerCls}>{armDeleteId === m.id ? "Pakka delete?" : "Delete"}</button>
               </div>
             </div>
           ))}
@@ -536,6 +548,7 @@ function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled
   const [form, setForm] = useState({ seriesId: "", teams: "", shortNames: "", startTime: "", venue: "", city: "", matchNumber: "", status: "scheduled", broadcastJson: "", unlockTime: false });
   const [actionOnly, setActionOnly] = useState(true);
   const [editingMatch, setEditingMatch] = useState(null);
+  const [armDeleteId, setArmDeleteId] = useState(null);
 
   const startMatchEdit = (m) => {
     setEditingMatch(m.id);
@@ -635,9 +648,21 @@ function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled
     }
   };
   const remove = async (id) => {
-    if (!confirm("Delete this match?")) return;
     const { ok, data } = await call(`/api/admin/matches/${id}`, { method: "DELETE" });
     if (ok) load(); else setMsg(data.error || "Delete failed.");
+  };
+  // v67: two-tap Delete instead of the native confirm() popup (it kept
+  // getting dismissed by accident) — the first tap arms the row's
+  // button ("Pakka delete?") for 3 seconds; only a second tap inside
+  // that window actually deletes.
+  const askRemove = (id) => {
+    if (armDeleteId !== id) {
+      setArmDeleteId(id);
+      setTimeout(() => setArmDeleteId((cur) => (cur === id ? null : cur)), 3000);
+      return;
+    }
+    setArmDeleteId(null);
+    remove(id);
   };
   const clearJunk = async () => {
     const count = matches.filter((m) => !m.verifiedAt).length;
@@ -761,7 +786,7 @@ function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled
         </button>
         <button onClick={() => startMatchEdit(m)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Edit</button>
         {m.status === "live" && <button onClick={() => markFinished(m.id)} title="Mark as finished (hides from site)" className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950">Finish</button>}
-        <button onClick={() => remove(m.id)} className={dangerCls}>Delete</button>
+        <button onClick={() => askRemove(m.id)} className={armDeleteId === m.id ? "rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" : dangerCls}>{armDeleteId === m.id ? "Pakka delete?" : "Delete"}</button>
         {inNew && (
           <button onClick={() => dismissNew(m)} title="Remove from New — it stays in the Action needed list below" className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950">Skip</button>
         )}
@@ -869,13 +894,24 @@ function MatchesTab({ call, refresh, editMatchRequest, onEditMatchRequestHandled
   );
 }
 
-function RecheckTab({ call, refresh, onEditSeries }) {
+function RecheckTab({ call, refresh, onEditSeries, onChanged }) {
   const [matches, setMatches] = useState([]);
   const [msg, setMsg] = useState("");
+  // v67: until the first load lands, the tab must say "Loading…" — it
+  // used to flash "No rechecks pending 🎉" on open while the list was
+  // still in flight, which twice read as "all clear" when it wasn't.
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     const { ok, data } = await call("/api/admin/matches/recheck");
-    if (ok) setMatches(data.matches || []);
+    if (ok) {
+      setMatches(data.matches || []);
+      setLoadError(false);
+    } else {
+      setLoadError(true);
+    }
+    setLoaded(true);
   }, [call]);
   useEffect(() => { load(); }, [load, refresh]);
 
@@ -886,7 +922,7 @@ function RecheckTab({ call, refresh, onEditSeries }) {
       method: "PUT",
       body: JSON.stringify({ recheckAt: null, recheckNote: "", verifiedAt: new Date().toISOString() }),
     });
-    if (ok) { setMsg(`Confirmed: ${m.teams?.[0]} vs ${m.teams?.[1]} — verified date refreshed.`); load(); }
+    if (ok) { setMsg(`Confirmed: ${m.teams?.[0]} vs ${m.teams?.[1]} — verified date refreshed.`); load(); onChanged && onChanged(); }
     else setMsg(data.error || "Confirm failed.");
   };
   const removeFlag = async (m) => {
@@ -895,7 +931,7 @@ function RecheckTab({ call, refresh, onEditSeries }) {
       method: "PUT",
       body: JSON.stringify({ recheckAt: null, recheckNote: "" }),
     });
-    if (ok) load(); else setMsg(data.error || "Remove failed.");
+    if (ok) { load(); onChanged && onChanged(); } else setMsg(data.error || "Remove failed.");
   };
 
   const now = Date.now();
@@ -941,9 +977,16 @@ function RecheckTab({ call, refresh, onEditSeries }) {
         Flag a match with the 🔁 button in the Matches or Series tab.
       </p>
       {msg && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{msg}</p>}
-      {matches.length === 0 && (
+      {!loaded ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading rechecks…</p>
+      ) : loadError ? (
+        <p className="text-sm font-bold text-rose-600 dark:text-rose-400">
+          Could not load rechecks.{" "}
+          <button onClick={load} className="font-bold underline">Retry</button>
+        </p>
+      ) : matches.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">No rechecks pending. 🎉</p>
-      )}
+      ) : null}
       {due.length > 0 && (
         <>
           <h3 className="mb-2 text-sm font-extrabold text-amber-700 dark:text-amber-400">Due now ({due.length})</h3>
@@ -1401,6 +1444,7 @@ export default function AdminPage() {
             : <RecheckTab
               call={call}
               refresh={refresh}
+              onChanged={() => setRefresh((r) => r + 1)}
               onEditSeries={(seriesId) => {
                 if (!seriesId) return;
                 setEditSeriesRequest({ id: seriesId, nonce: Date.now() });
